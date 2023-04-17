@@ -7,12 +7,10 @@ import argparse
 from datetime import datetime
 import json
 import os
-import subprocess
-from typing import Optional, Tuple
+from typing import Optional
 
 # EXT
 import torch
-from torch.utils.data import DataLoader
 from transformers.optimization import get_inverse_sqrt_schedule
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from codecarbon import OfflineEmissionsTracker
@@ -41,7 +39,7 @@ DATASETS = {
 
 # DEFAULTS
 SEED = 1234
-BATCH_SIZE = 8  # TODO: Debug
+BATCH_SIZE = 64
 NUM_TRAINING_STEPS = 40000
 NUM_WARMUP_STEPS = 2500
 LEARNING_RATE = 3e-05
@@ -65,10 +63,10 @@ except ImportError:
 if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
-# TODO: Set up model finetuning loop
-#   --optimizer adam --adam-eps 1e-06 --adam-betas '(0.9, 0.98)' \
-#   --lr-scheduler inverse_sqrt --lr 3e-05 --warmup-updates 2500 --max-update 40000 \
-#   --dropout 0.3 --attention-dropout 0.1 --weight-decay 0.0
+# Original fairseq command for training:
+# --optimizer adam --adam-eps 1e-06 --adam-betas '(0.9, 0.98)' \
+# --lr-scheduler inverse_sqrt --lr 3e-05 --warmup-updates 2500 --max-update 40000 \
+# --dropout 0.3 --attention-dropout 0.1 --weight-decay 0.0
 
 
 def finetune_model(
@@ -82,7 +80,6 @@ def finetune_model(
     seed: int,
     data_dir: str,
     model_dir: str,
-    emission_dir: str,
     wandb_run: Optional[WandBRun] = None,
 ):
     """
@@ -110,8 +107,6 @@ def finetune_model(
         Path to directory where data is stored.
     model_dir: str
         Path to directory where model is stored.
-    emission_dir: str
-        Path to directory where emissions are stored.
     wandb_run: Optional[WandBRun]
         WandB run to use for logging.
     """
@@ -131,8 +126,6 @@ def finetune_model(
         truncation=True
     )
 
-    # TODO: Check if dataset has already been indexed (annoying to do every time) - requires to save dataloaders
-
     # Initialize model
     model = MBartForConditionalGeneration.from_pretrained(model_identifier)
 
@@ -144,8 +137,7 @@ def finetune_model(
         optimizer=optimizer, num_warmup_steps=num_warmup_steps
     )
 
-    # TODO: Debug, change to train later
-    for step, batch in enumerate(data_loaders["dev"]):
+    for step, batch in enumerate(data_loaders["train"]):
 
         if step == num_training_steps:
             break
@@ -161,11 +153,37 @@ def finetune_model(
             wandb_run.log({"loss": loss.detach().cpu().item()})
 
         if step % VALIDATION_INTERVAL == 0 and step > 0 and wandb_run is not None:
+            # Get validation loss
             val_batch = next(iter(data_loaders["dev"]))
             val_outputs = model(**val_batch)
             val_loss = val_outputs.loss
 
-            wandb_run.log({"val_loss": val_loss.detach().cpu().item()})
+            # Get validation BLEU / chrF
+            temp_path = f"{data_dir}/temp_translations.{tgt_lang[:2]}"
+            generate_test_translations(
+                model,
+                tokenizer,
+                data_loaders["dev"],
+                temp_path
+            )
+            val_res = evaluate_sacrebleu(
+                translations_path=temp_path,
+                references_path=f"{data_dir}/{dataset}/dev.{tgt_lang[:2]}",
+                src_lang=src_lang[:2],
+                tgt_lang=tgt_lang[:2]
+            )
+
+            # Delete temporary file again
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+            wandb_run.log(
+                {
+                    "val_loss": val_loss.detach().cpu().item(),
+                    "val_bleu": val_res.bleu,
+                    "val_chrF": val_res.chrF
+                }
+            )
 
     # Save model
     result_dir = f"{model_dir}/{dataset}_{timestamp}"
@@ -188,9 +206,6 @@ def finetune_model(
         source_path=f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}",
         references_path=f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}",
     )
-
-    # Save emissions
-    ...  # TODO
 
     # Return results for knockkock and result file
     results = {
@@ -262,7 +277,7 @@ if __name__ == "__main__":
     if args.wandb:
         wandb_run = wandb.init(
             project=PROJECT_NAME,
-            tags=[args.dataset, args.model, str(args.training_size)],
+            tags=[args.dataset, args.model],
             settings=wandb.Settings(start_method="fork"),
             group=args.dataset
         )
@@ -301,7 +316,6 @@ if __name__ == "__main__":
             seed=args.seed,
             data_dir=args.data_dir,
             model_dir=args.model_dir,
-            emission_dir=args.emission_dir,
             wandb_run=wandb_run,
         )
 
