@@ -4,3 +4,4 @@ wandb
 knockknock
 transformers==4.28.0
 unbabel-comet
+evaluate

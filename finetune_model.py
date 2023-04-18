@@ -19,10 +19,10 @@ import numpy as np
 import wandb
 
 # PROJECT
-from src.evaluation import generate_test_translations, evaluate_comet, evaluate_sacrebleu
+from src.evaluation import evaluate_model
 
 # PROJECT
-from src.data import load_data, SUFFIX
+from src.data import load_data
 from src.types import Device, WandBRun
 
 # CONST
@@ -153,35 +153,28 @@ def finetune_model(
             wandb_run.log({"loss": loss.detach().cpu().item()})
 
         if step % VALIDATION_INTERVAL == 0 and step > 0 and wandb_run is not None:
-            # Get validation loss
-            val_batch = next(iter(data_loaders["dev"]))
-            val_outputs = model(**val_batch)
-            val_loss = val_outputs.loss
+            with torch.no_grad():
+                model.eval()
+                # Get validation loss
+                val_batch = next(iter(data_loaders["dev"]))
+                val_outputs = model(**val_batch)
+                val_loss = val_outputs.loss
 
-            # Get validation BLEU / chrF
-            temp_path = f"{data_dir}/temp_translations.{tgt_lang[:2]}"
-            generate_test_translations(
-                model,
-                tokenizer,
-                data_loaders["dev"],
-                temp_path
-            )
-            val_res = evaluate_sacrebleu(
-                translations_path=temp_path,
-                references_path=f"{data_dir}/{dataset}/dev.{tgt_lang[:2]}",
-                src_lang=src_lang[:2],
-                tgt_lang=tgt_lang[:2]
-            )
+                # Get validation scores
+                val_results = evaluate_model(
+                    model=model,
+                    data_loader=data_loaders["dev"],
+                    tokenizer=tokenizer,
+                    source_file=f"{data_dir}/{dataset}/dev.{src_lang[:2]}",
+                    reference_file=f"{data_dir}/{dataset}/dev.{tgt_lang[:2]}",
+                )
 
-            # Delete temporary file again
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+                model.train()
 
             wandb_run.log(
                 {
                     "val_loss": val_loss.detach().cpu().item(),
-                    "val_bleu": val_res.bleu,
-                    "val_chrF": val_res.chrF
+                    **val_results
                 }
             )
 
@@ -193,27 +186,19 @@ def finetune_model(
     # Evaluate model
     src_abbr = src_lang[:2]
     tgt_abbr = tgt_lang[:2]
-    translations_path = f"{result_dir}/test_translations.{tgt_abbr}"
-    generate_test_translations(model, tokenizer, data_loaders["test"], translations_path)
-    bleu, chrf = evaluate_sacrebleu(
-        translations_path=translations_path,
-        references_path=f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}",
-        src_lang=src_abbr,
-        tgt_lang=tgt_abbr
-    )
-    comet = evaluate_comet(
-        translations_path=translations_path,
-        source_path=f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}",
-        references_path=f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}",
+    test_results = evaluate_model(
+        model=model,
+        data_loader=data_loaders["test"],
+        tokenizer=tokenizer,
+        source_file=f"{data_dir}/{dataset}/test.{src_abbr}",
+        reference_file=f"{data_dir}/{dataset}/test.{tgt_abbr}",
     )
 
     # Return results for knockkock and result file
     results = {
         "model_identifier": model_identifier,
         "dataset": dataset,
-        "bleu": bleu,
-        "chrF": chrf,
-        "comet": comet
+        **test_results
     }
 
     # Write results to file
