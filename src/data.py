@@ -77,8 +77,7 @@ def load_data(
     """
     data_loaders = {}
 
-    # TODO: Debug ["train", "dev", "test"]
-    for split_name in ["dev", "test"]:
+    for split_name in ["train", "dev", "test"]:
         src_lang, tgt_lang = dataset_name[:2], dataset_name[2:]
         src_suffix, tgt_suffix = SUFFIX[src_lang], SUFFIX[tgt_lang]
 
@@ -96,7 +95,7 @@ def load_data(
 
         # Collate into dataloader
         split_dl = DataLoader(
-            dataset, batch_size=batch_size, shuffle=split_name in ("train", "dev")
+            dataset, batch_size=batch_size, shuffle=split_name == "train"
         )
 
         data_loaders[split_name] = split_dl

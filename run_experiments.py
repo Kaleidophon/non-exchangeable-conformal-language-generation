@@ -16,7 +16,9 @@ from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import wandb
 
 # PROJECT
+from src.data import load_data
 from src.types import Device, WandBRun
+from src.conformal_risk import build_calibration_data, CalibrationData, get_optimal_k
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -35,6 +37,7 @@ CALIBRATION_DATA_PATH = "./data/calibration/calibration_data.npy"
 SEED = 1234
 BATCH_SIZE = 64
 NUM_BEAMS = 200
+ALPHA = 0.9
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -58,10 +61,12 @@ def run_experiments(
     dataset: str,
     batch_size: int,
     num_beams: int,
+    alpha: float,
     device: Device,
-    seed: int,
     data_dir: str,
     result_dir: str,
+    source_path: str,
+    references_path: str,
     model_path: Optional[str] = None,
     calibration_data_path: Optional[str] = None,
     wandb_run: Optional[WandBRun] = None,
@@ -79,14 +84,18 @@ def run_experiments(
         Batch size to be used for the experiments.
     num_beams: int
         Number of beams to be used for the experiments.
+    alpha: float
+        Pre-defined confidence level for the experiments.
     device: Device
         Device to be used for the experiments.
-    seed: int
-        Seed to be used for the experiments.
     data_dir: str
         Path to the data directory.
     result_dir: str
         Path to the directory where the results should be saved.
+    source_path: str
+        Path to the file with translation sources.
+    references_path: str
+        Path to the file with references translations.
     calibration_data_path: Optional[str]
         Path to the calibration data. If not None, the calibration data will be loaded from the data directory.
     wandb_run: Optional[WandBRun]
@@ -98,18 +107,43 @@ def run_experiments(
         Dictionary containing the results of the experiments.
     """
     # Load or init model
-    ...  # TODO
+    if model_path is not None:
+        model = MBartForConditionalGeneration.from_pretrained(model_path)
+
+    else:
+        model = MBartForConditionalGeneration.from_pretrained(model_identifier)
+
+    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier)
 
     # Load data
-    ...  # TODO
+    data_loaders = load_data(
+        dataset, tokenizer, batch_size, device, data_dir,
+        padding="max_length",
+        max_length=256,
+        truncation=True
+    )
+    del data_loaders["train"]  # Not necessary, free up memory
 
     # Create generations on dev set, score them and create datastructure save the scores for easy access
-    ...  # TODO
-    # TODO: Add option to load or save this datastructure
+    calibration_data = None
+    if calibration_data_path is not None:
+        if os.path.exists(calibration_data_path):
+            calibration_data = CalibrationData.load(calibration_data_path)
+
+    if calibration_data is None:
+        calibration_data = build_calibration_data(
+            model=model,
+            data_loader=data_loaders["dev"],
+            num_beams=num_beams,
+            source_path=source_path,
+            references_path=references_path
+        )
+
+        if calibration_data_path is not None:
+            calibration_data.save(calibration_data_path)
 
     # Conduct experiments on test
-    ...  # TODO
-    # TODO: Implement risk control algorithm for this case
+    optimal_k = get_optimal_k(calibration_data, alpha)
 
     # Gather results and report them
     ...  # TODO
@@ -147,6 +181,11 @@ if __name__ == "__main__":
         "--num-beams",
         type=int,
         default=NUM_BEAMS
+    )
+    parser.add_argument(
+        "--alpha",
+        type=int,
+        default=ALPHA
     )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
