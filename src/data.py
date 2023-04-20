@@ -20,21 +20,28 @@ SUFFIX = {
 class ParallelDataset(Dataset):
     def __init__(self, src_data, tgt_data, tokenizer: Tokenizer, device: Device, **tokenizer_kwargs):
         super().__init__()
-        self.src_data = src_data
+
         self.tgt_data = tgt_data
         self.tokenizer = tokenizer
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
 
+        # Process data
+        self.src_data = [
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
+        ]
+        self.tgt_data = [
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
+        ]
+
+        self.length = len(src_data)
+
     def __len__(self):
-        return len(self.src_data)
+        return self.length
 
     def __getitem__(self, idx):
         src = self.src_data[idx]
         tgt = self.tgt_data[idx]
-
-        src = self.tokenizer(src.strip(), return_tensors="pt", **self.tokenizer_kwargs)
-        tgt = self.tokenizer(tgt.strip(), return_tensors="pt", **self.tokenizer_kwargs)
 
         data = {
             "input_ids": src["input_ids"].squeeze(0),
@@ -82,14 +89,14 @@ def load_data(
         src_suffix, tgt_suffix = SUFFIX[src_lang], SUFFIX[tgt_lang]
 
         # Load splits
-        src_split = open(
+        src_split = (line for line in open(
             f"{data_dir}/{dataset_name}/{split_name}.{src_suffix}",
             "r"
-        ).readlines()
-        tgt_split = open(
+        ))
+        tgt_split = (line for line in open(
             f"{data_dir}/{dataset_name}/{split_name}.{tgt_suffix}",
             "r"
-        ).readlines()
+        ))
 
         dataset = ParallelDataset(src_split, tgt_split, tokenizer, device, **tokenizer_kwargs)
 
@@ -97,6 +104,7 @@ def load_data(
         split_dl = DataLoader(
             dataset, batch_size=batch_size, shuffle=split_name == "train"
         )
+        del src_split, tgt_split, dataset
 
         data_loaders[split_name] = split_dl
 
