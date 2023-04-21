@@ -28,8 +28,7 @@ class ParallelDataset(Dataset):
         self.tokenizer_kwargs = tokenizer_kwargs
 
         # TODO: Debug
-        import numpy as np
-        line_break = np.inf
+        line_break = 10
 
         # Process data
         self.src_data = []

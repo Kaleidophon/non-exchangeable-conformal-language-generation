@@ -12,6 +12,7 @@ from einops import rearrange
 import evaluate
 import torch
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 
@@ -46,10 +47,10 @@ class CalibrationData:
         """
         # Sort by log probs and add to data store
         log_probs, indices = log_probs.sort(descending=True)
-        losses = losses[indices]
+        losses = torch.gather(losses, dim=1, index=indices)
 
-        self.losses = torch.cat([self.losses, losses.unsqueeze(0)])
-        self.log_probs = torch.cat([self.log_probs, log_probs.unsqueeze(0)])
+        self.losses = torch.cat([self.losses, losses])
+        self.log_probs = torch.cat([self.log_probs, log_probs])
 
     def get_losses(self, k: int):
         """
@@ -114,8 +115,7 @@ def build_calibration_data(
         Calibration data, including the losses (i.e. the quality) and log probabilities of the hypotheses.
     """
     calibration_data = CalibrationData(num_beams)
-    translations = []
-    comet_metric = evaluate.load('bleu')
+    comet_metric = evaluate.load('bleu')  # TODO: Change this back to comet
 
     model.eval()
 
@@ -127,11 +127,8 @@ def build_calibration_data(
     with open(references_path, "r") as f:
         references = [line.strip() for line in f.readlines()]
 
-    batch_size = None
-
-    for i, batch in enumerate(data_loader):
-        if batch_size is None:
-            batch_size = len(batch["input_ids"])
+    for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
+        batch_size = len(batch["input_ids"])
 
         # Get input and target
         input_ids = batch["input_ids"].to(model.device)
@@ -165,11 +162,10 @@ def build_calibration_data(
         comet_scores = torch.FloatTensor([
             comet_metric.compute(
                 predictions=[trans], references=[ref],  # sources=batch_sources
-            )["bleu"] / 100
+            )["bleu"] / 100   # TODO: Change this back to comet
             for trans, ref, source in zip(batch_translations, batch_references, batch_sources)
         ])
-        # TODO: Change this back to comet
-        batch_losses = 1 - torch.tensor(comet_scores)
+        batch_losses = 1 - comet_scores
 
         # Do some reshaping
         batch_losses = rearrange(batch_losses, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
