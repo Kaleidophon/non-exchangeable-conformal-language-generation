@@ -4,8 +4,11 @@ Define the core functions for conformal risk control in NLG.
 
 # STD
 import dill
+from functools import reduce
+from operator import add
 
 # EXT
+from einops import rearrange
 import evaluate
 import torch
 from torch.utils.data import DataLoader
@@ -80,10 +83,12 @@ class CalibrationData:
 
 def build_calibration_data(
     model: MBartForConditionalGeneration,
+    tokenizer: MBart50TokenizerFast,
     data_loader: DataLoader,
     num_beams: int,
     source_path: str,
     references_path: str,
+    max_length: int = 64,  # TODO: Debug 256,
 ) -> CalibrationData:
     """
     Build calibration data from dev set using the specified model.
@@ -110,19 +115,24 @@ def build_calibration_data(
     """
     calibration_data = CalibrationData(num_beams)
     translations = []
-    comet_metric = evaluate.load('comet')
+    comet_metric = evaluate.load('bleu')
 
     model.eval()
 
     # Load source sentences and references
     with open(source_path, "r") as f:
-        source_sentences = [line.strip() for line in f.readlines()]
+        sources = [line.strip() for line in f.readlines()]
 
     # Load reference translations
     with open(references_path, "r") as f:
-        reference_translations = [line.strip() for line in f.readlines()]
+        references = [line.strip() for line in f.readlines()]
 
-    for batch in data_loader:
+    batch_size = None
+
+    for i, batch in enumerate(data_loader):
+        if batch_size is None:
+            batch_size = len(batch["input_ids"])
+
         # Get input and target
         input_ids = batch["input_ids"].to(model.device)
         attention_mask = batch["attention_mask"].to(model.device)
@@ -132,22 +142,41 @@ def build_calibration_data(
             input_ids=input_ids,
             attention_mask=attention_mask,
             num_beams=num_beams,
-            max_length=256,
+            max_length=max_length,
             early_stopping=True,
             num_return_sequences=num_beams,
+            return_dict_in_generate=True,
+            output_scores=True,
+            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"]
         )
+        batch_translations = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+        batch_scores = outputs.sequences_scores
 
-        # Compute losses and log probs
-        log_probs = model(input_ids, attention_mask=attention_mask, labels=outputs.logits)[0]
+        # Duplicate references and sources for this batch since we have every source represented multiple times (for
+        # every beam) on the hypotheses
+        batch_references = reduce(add, [
+           [references[j]] * num_beams
+           for j in range(i * batch_size, (i + 1) * batch_size)
+        ])
+        batch_sources = reduce(add, [
+            [sources[j]] * num_beams
+            for j in range(i * batch_size, (i + 1) * batch_size)
+        ])
+        comet_scores = torch.FloatTensor([
+            comet_metric.compute(
+                predictions=[trans], references=[ref],  # sources=batch_sources
+            )["bleu"] / 100
+            for trans, ref, source in zip(batch_translations, batch_references, batch_sources)
+        ])
+        # TODO: Change this back to comet
+        batch_losses = 1 - torch.tensor(comet_scores)
 
-        # Debug this
-        comet_scores = comet_metric.compute(
-            predictions=translations, references=reference_translations, sources=source_sentences
-        )
-        losses = 1 - torch.tensor(comet_scores)
+        # Do some reshaping
+        batch_losses = rearrange(batch_losses, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
+        batch_scores = rearrange(batch_scores, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
 
         # Add calibration points
-        calibration_data.add_calibration_points(losses, log_probs)
+        calibration_data.add_calibration_points(batch_losses, batch_scores)
 
     return calibration_data
 

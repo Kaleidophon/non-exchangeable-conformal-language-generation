@@ -39,7 +39,7 @@ DATASETS = {
 
 # DEFAULTS
 SEED = 1234
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 NUM_TRAINING_STEPS = 40000
 NUM_WARMUP_STEPS = 2500
 LEARNING_RATE = 3e-05
@@ -123,7 +123,8 @@ def finetune_model(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
         max_length=256,
-        truncation=True
+        truncation=True,
+        load_splits=["train", "dev"]
     )
 
     # Initialize model
@@ -182,6 +183,16 @@ def finetune_model(
     result_dir = f"{model_dir}/{dataset}_{timestamp}"
     os.mkdir(result_dir)
     torch.save(model.state_dict(), f"{result_dir}/model.pt")
+
+    del data_loaders
+
+    data_loaders = load_data(
+        dataset, tokenizer, batch_size, device, data_dir,
+        padding="max_length",
+        max_length=256,
+        truncation=True,
+        load_splits=["test"]
+    )
 
     # Evaluate model
     src_abbr = src_lang[:2]

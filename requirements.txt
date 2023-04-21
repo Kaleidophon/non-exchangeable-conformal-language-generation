@@ -6,3 +6,4 @@ transformers==4.28.0
 unbabel-comet
 evaluate
 dill
+einops

@@ -5,6 +5,7 @@ Implement functions concerned with data loading and preprocessing.
 # EXT
 import torch
 from torch.utils.data import DataLoader, Dataset
+from typing import Tuple
 
 # PROJECT
 from src.types import Tokenizer, Device
@@ -26,15 +27,35 @@ class ParallelDataset(Dataset):
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
 
+        # TODO: Debug
+        import numpy as np
+        line_break = np.inf
+
         # Process data
+        self.src_data = []
+        for i, line in enumerate(src_data):
+            if i > line_break:
+                break
+
+            self.src_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
+
+        self.tgt_data = []
+        for i, line in enumerate(tgt_data):
+            if i > line_break:
+                break
+
+            self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
+
+        """
         self.src_data = [
             self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
         ]
         self.tgt_data = [
             self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
         ]
+        """
 
-        self.length = len(src_data)
+        self.length = len(self.src_data)
 
     def __len__(self):
         return self.length
@@ -59,6 +80,7 @@ def load_data(
     batch_size: int,
     device: Device,
     data_dir: str,
+    load_splits: Tuple[str, ...] = ("train", "dev", "test"),
     **tokenizer_kwargs
 ) -> DataLoader:
     """
@@ -76,6 +98,8 @@ def load_data(
         Device to use for tokenization.
     data_dir: str
         Path to directory where data is stored.
+    load_splits: Tuple[str, ...]
+        Splits to load.
 
     Returns
     -------
@@ -84,7 +108,7 @@ def load_data(
     """
     data_loaders = {}
 
-    for split_name in ["train", "dev", "test"]:
+    for split_name in load_splits:
         src_lang, tgt_lang = dataset_name[:2], dataset_name[2:]
         src_suffix, tgt_suffix = SUFFIX[src_lang], SUFFIX[tgt_lang]
 

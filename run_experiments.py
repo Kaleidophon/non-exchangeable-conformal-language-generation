@@ -16,13 +16,14 @@ from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import wandb
 
 # PROJECT
-from src.data import load_data
+from src.data import load_data, SUFFIX
 from src.types import Device, WandBRun
 from src.conformal_risk import build_calibration_data, CalibrationData, get_optimal_k
 
 # CONST
 DATA_DIR = "./data/wmt22"
 MODEL_DIR = "./models/"
+RESULT_DIR = "./results"
 EMISSION_DIR = "./emissions"
 MODEL_IDENTIFIER = "facebook/mbart-large-50-many-to-many-mmt"
 PROJECT_NAME = "nlg-conformal-risk-control"
@@ -31,12 +32,13 @@ DATASETS = {
     "deen": ("de_DE", "en_XX"),
     "jaen": ("ja_XX", "en_XX")
 }
+
 CALIBRATION_DATA_PATH = "./data/calibration/calibration_data.npy"
 
 # DEFAULTS
 SEED = 1234
-BATCH_SIZE = 64
-NUM_BEAMS = 200
+BATCH_SIZE = 6  # TODO: Debug 64
+NUM_BEAMS = 4  # TODO: Debug
 ALPHA = 0.9
 
 # GLOBALS
@@ -118,11 +120,11 @@ def run_experiments(
     # Load data
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
+        load_splits=("dev", "test"),
         padding="max_length",
         max_length=256,
         truncation=True
     )
-    del data_loaders["train"]  # Not necessary, free up memory
 
     # Create generations on dev set, score them and create datastructure save the scores for easy access
     calibration_data = None
@@ -133,6 +135,7 @@ def run_experiments(
     if calibration_data is None:
         calibration_data = build_calibration_data(
             model=model,
+            tokenizer=tokenizer,
             data_loader=data_loaders["dev"],
             num_beams=num_beams,
             source_path=source_path,
@@ -189,9 +192,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
+    parser.add_argument("--result-dir", type=str, default=RESULT_DIR)
     parser.add_argument("--track-emissions", action="store_true")
     parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--knock", action="store_true", default=False)
     parser.add_argument("--wandb", action="store_true", default=False)
     args = parser.parse_args()
@@ -229,6 +232,11 @@ if __name__ == "__main__":
             token=TELEGRAM_API_TOKEN, chat_id=TELEGRAM_CHAT_ID
         )(run_experiments)
 
+    # Define paths for translation data based on dataset chosen
+    src_lang, tgt_lang = args.dataset[:2], args.dataset[2:]
+    source_path = os.path.join(args.data_dir, args.dataset, f"dev.{SUFFIX[src_lang]}")
+    references_path = os.path.join(args.data_dir, args.dataset, f"dev.{SUFFIX[tgt_lang]}")
+
     try:
         # Run experiments
         run_experiments(
@@ -236,10 +244,12 @@ if __name__ == "__main__":
             dataset=args.dataset,
             batch_size=args.batch_size,
             num_beams=args.num_beams,
+            alpha=args.alpha,
             device=args.device,
-            seed=args.seed,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
+            source_path=source_path,
+            references_path=references_path,
             model_path=args.model_path,
             calibration_data_path=args.calibration_data_path,
             wandb_run=wandb_run
