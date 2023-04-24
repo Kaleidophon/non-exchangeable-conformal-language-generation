@@ -6,12 +6,13 @@ Conduct experiments for conformal risk control in NLG.
 import argparse
 from datetime import datetime
 import os
-from typing import Optional
+from typing import Optional, Dict
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
 from knockknock import telegram_sender
 import torch
+from torch.utils.data import DataLoader
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import wandb
 
@@ -149,7 +150,19 @@ def run_experiments(
     optimal_k = get_optimal_k(calibration_data, alpha)
 
     # Gather results and report them
-    ...  # TODO
+    del data_loaders["dev"]
+
+
+
+def test_found_k(
+    model: MBartForConditionalGeneration,
+    tokenizer: MBart50TokenizerFast,
+    k: int,
+    test_loader: DataLoader
+) -> Dict[str, float]:
+    ... # TOOD: Implement
+
+
 
 
 if __name__ == "__main__":
