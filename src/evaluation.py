@@ -63,7 +63,8 @@ def evaluate_model(
     comet_score = comet_metric.compute(
         predictions=translations, references=reference_translations, sources=source_sentences
     )
-    result_dict["comet"] = comet_score
+    result_dict["comet1"] = comet_score["scores"][0]
+    result_dict["comet2"] = comet_score["scores"][1]
 
     chrf = evaluate.load("chrf")
     chrf_results = chrf.compute(predictions=translations, references=reference_translations)

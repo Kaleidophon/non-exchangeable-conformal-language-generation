@@ -4,6 +4,6 @@ wandb
 knockknock
 transformers==4.28.0
 unbabel-comet
-evaluate
+evaluate @ git+https://github.com/huggingface/evaluate@3fecf5df282dcbe3098c8023ea813922bb90fb34
 dill
 einops
