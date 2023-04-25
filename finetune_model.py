@@ -27,7 +27,7 @@ from src.types import Device, WandBRun
 
 # CONST
 DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models/"
+MODEL_DIR = "./models"
 EMISSION_DIR = "./emissions"
 MODEL_IDENTIFIER = "facebook/mbart-large-50-many-to-many-mmt"
 PROJECT_NAME = "nlg-conformal-risk-control"
@@ -152,7 +152,12 @@ def finetune_model(
         scheduler.step()
 
         if wandb_run is not None:
-            wandb_run.log({"loss": loss.detach().cpu().item()})
+            wandb_run.log(
+                {
+                    "batch_loss": loss.detach().cpu().item(),
+                    "batch_learning_rate": optimizer.param_groups[0]['lr']
+                }
+            )
 
         if step % VALIDATION_INTERVAL == 0 and step > 0 and wandb_run is not None:
             with torch.no_grad():

@@ -27,6 +27,7 @@ class ParallelDataset(Dataset):
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
 
+        """
         # TODO: Debug
         line_break = 10
 
@@ -44,15 +45,14 @@ class ParallelDataset(Dataset):
                 break
 
             self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
-
         """
+
         self.src_data = [
             self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
         ]
         self.tgt_data = [
             self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
         ]
-        """
 
         self.length = len(self.src_data)
 
