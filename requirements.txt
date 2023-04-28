@@ -1,4 +1,3 @@
-transformers
 datasets
 numpy==1.23.5
 protobuf==3.20
@@ -10,3 +9,5 @@ unbabel-comet
 evaluate @ git+https://github.com/huggingface/evaluate@3fecf5df282dcbe3098c8023ea813922bb90fb34
 dill
 einops
+faiss-cpu
+faiss-gpu
