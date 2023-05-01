@@ -19,7 +19,7 @@ import wandb
 # PROJECT
 from src.data import load_data, SUFFIX
 from src.types import Device, WandBRun
-from src.conformal_risk import build_calibration_data, CalibrationData, get_optimal_k
+from src.conformal import build_calibration_data, CalibrationData, get_optimal_k
 
 # CONST
 DATA_DIR = "./data/wmt22"

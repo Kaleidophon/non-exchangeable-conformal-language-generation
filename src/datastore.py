@@ -4,14 +4,22 @@ Implementation of the datastore using FAISS. This implementation is heavily base
 """
 
 # STD
+from collections import namedtuple
+import dill
+from functools import reduce
+from operator import add
 import os
 from typing import Tuple
 
 # EXT
+from einops import rearrange
+import evaluate
 import faiss
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 # PROJECT
 from src.types import Device
@@ -232,39 +240,107 @@ class DataStore:
 
         return distances, values
 
-    def compute_weights(self, distances: torch.FloatTensor, values: torch.FloatTensor):
-        weights = np.exp(-self.temperature * distances)
 
-        normed_weights = weights / (np.sum(weights) + 1)
-        # print(weights[:10], normed_weights[:10])
-        # print("normed_weights", normed_weights[:10])
-        # print(conformity_scores)
-        # print(normed_weights)
+def build_calibration_data(
+    model: MBartForConditionalGeneration,
+    tokenizer: MBart50TokenizerFast,
+    data_loader: DataLoader,
+    num_beams: int,
+    source_path: str,
+    references_path: str,
+    max_length: int = 64,  # TODO: Debug 256,
+) -> CalibrationData:
+    """
+    Build calibration data from dev set using the specified model.
 
-        # Sort by conformal score ascending since we're trying to find the smallest q
-        sorted_weights_and_scores = sorted(
-            zip(normed_weights, conformity_scores), key=lambda tpl: tpl[1]
+    Parameters
+    ----------
+    model: MBartForConditionalGeneration
+        Model to be used for the experiments.
+    tokenizer: MBart50TokenizerFast
+        Tokenizer to be used for the experiments.
+    data_loader: DataLoader
+        Data loader to be used for the experiments.
+    num_beams: int
+        Number of beams to be used for the experiments.
+    source_path: str
+        Path to the source file. Used for evaluating translations.
+    references_path: str
+        Path to the references file. Used for evaluating translations.
+
+    Returns
+    -------
+    CalibrationData
+        Calibration data, including the losses (i.e. the quality) and log probabilities of the hypotheses.
+    """
+    # TODO: Rewrite
+    calibration_data = CalibrationData(num_beams)
+    comet_metric = evaluate.load('bleu')  # TODO: Change this back to comet
+
+    model.eval()
+
+    # Load source sentences and references
+    with open(source_path, "r") as f:
+        sources = [line.strip() for line in f.readlines()]
+
+    # Load reference translations
+    with open(references_path, "r") as f:
+        references = [line.strip() for line in f.readlines()]
+
+    for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
+        batch_size = len(batch["input_ids"])
+
+        # Get input and target
+        input_ids = batch["input_ids"].to(model.device)
+        attention_mask = batch["attention_mask"].to(model.device)
+
+        # Generate hypotheses
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            num_beams=num_beams,
+            max_length=max_length,
+            early_stopping=True,
+            num_return_sequences=num_beams,
+            return_dict_in_generate=True,
+            output_scores=True,
+            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"]
         )
+        batch_translations = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+        batch_scores = outputs.sequences_scores
 
-        # Find the smallest q (compared to conformal scores)
-        # for which the sum of corresponding weights is bigger equal than 1 - alpha
-        q_hat = np.inf
-        cumsum = 0
+        # Duplicate references and sources for this batch since we have every source represented multiple times (for
+        # every beam) on the hypotheses
+        batch_references = reduce(add, [
+           [references[j]] * num_beams
+           for j in range(i * batch_size, (i + 1) * batch_size)
+        ])
+        batch_sources = reduce(add, [
+            [sources[j]] * num_beams
+            for j in range(i * batch_size, (i + 1) * batch_size)
+        ])
+        comet_scores = torch.FloatTensor([
+            comet_metric.compute(
+                predictions=[trans], references=[ref],  # sources=batch_sources
+            )["bleu"] / 100   # TODO: Change this back to comet
+            for trans, ref, source in zip(batch_translations, batch_references, batch_sources)
+        ])
+        batch_losses = 1 - comet_scores
 
-        for weight, score in sorted_weights_and_scores:
-            if cumsum >= 1 - self.alpha:
-                q_hat = score
-                break
+        # Do some reshaping
+        batch_losses = rearrange(batch_losses, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
+        batch_scores = rearrange(batch_scores, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
 
-            cumsum += weight
+        # Add calibration points
+        calibration_data.add_calibration_points(batch_losses, batch_scores)
 
-        n_eff = np.sum(weights) / np.sum(weights ** 2)
+    return calibration_data
 
-def read_and_train():
-    """
-    Read the raw features and train the index.
-    :return:
-    """
+
+if __name__ == "__main__":
+    # TODO: Implement conformity scores
+    # TODO: Test saving and loading
+
     n_samples = 6000
     num_features = 128
     value_dim = 10000
@@ -277,12 +353,8 @@ def read_and_train():
     print(test_query)
     datastore.search_k(test_query, 10)
 
-    #datastore.read_features_and_train(
+    # datastore.read_features_and_train(
     #    feature_dir=args.feature_dir,
     #    output_dir=args.output_dir,
     #    percentage=args.sample_percentage,
-    #)
-
-
-if __name__ == "__main__":
-    read_and_train()
+    # )
