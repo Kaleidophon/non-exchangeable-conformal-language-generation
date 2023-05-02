@@ -88,6 +88,7 @@ class DataStore:
         self.index = faiss.IndexFlatIP(self.key_dim)
         #self.index = faiss.IndexIVFPQ(quantizer, self.key_dim, self.num_centroids, self.code_size, 8)
         #self.index.nprobe = 32  # TODO: What is this?
+        # TODO: Reimplement quantization: https://github.com/facebookresearch/faiss/wiki/Lower-memory-footprint
 
         if self.device != "cpu":
             co = faiss.GpuClonerOptions()
@@ -97,7 +98,7 @@ class DataStore:
 
         self.temperature = temperature  # temperature as described in the paper
         self.max_num_training_keys = max_num_training_keys
-        self.value_tensor = torch.FloatTensor((0, self.value_dim))
+        self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16)
 
     def load(self, save_dir: str) -> None:
         """
@@ -108,9 +109,8 @@ class DataStore:
         save_dir : str
             Directory containing index.trained (the trained index) and token_ids.pt (token ids sorted by index id).
         """
-        # TODO: Rewrite
         self.index = faiss.read_index(os.path.join(save_dir, self.index_file_name))
-        self.token_lookup_tensor = torch.tensor(
+        self.value_tensor = torch.tensor(
             torch.load(os.path.join(save_dir, self.token_ids_file_name))
         )
 
@@ -199,9 +199,9 @@ class DataStore:
         :param keys_to_add: a numpy array of shape (num_keys, keys_dim)
         :return: The index will be updated with the input keys.
         """
-        self.index.add(keys.cpu().numpy())  # add vectors to the index
+        self.index.add(keys)  # add vectors to the index
         self.value_tensor = torch.cat(
-            [self.value_tensor, values], dim=0
+            [self.value_tensor, values.to(torch.float16)], dim=0
         )
 
     def save(self, output_dir: str) -> None:
@@ -214,15 +214,15 @@ class DataStore:
             # write the trained index
             faiss.write_index(self.index, os.path.join(output_dir, self.index_file_name))
         except Exception as e:
-            raise IOError(f"Encountered error when writing FAISS index to {output_dir}")
+            raise IOError(f"Encountered error when writing FAISS index to {output_dir}: {e}")
 
         try:
             # save the index for token_ids
             torch.save(
-                self.token_lookup_tensor, os.path.join(output_dir, self.token_ids_file_name)
+                self.value_tensor, os.path.join(output_dir, self.token_ids_file_name)
             )
         except Exception as e:
-            raise IOError(f"Encountered error when saving torch tensor to {output_dir}")
+            raise IOError(f"Encountered error when saving torch tensor to {output_dir}: {e}")
 
     def search_k(self, query: torch.tensor, k: int) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
@@ -234,9 +234,7 @@ class DataStore:
         distances, indices = self.index.search(
             query, k
         )  # D, I will have shape (num_queries, k), containing the distance and the index
-
-        distances = torch.FloatTensor(distances).to(self.device)
-        values = self.token_lookup_tensor[indices, :]  # (num_queries, k)
+        values = self.value_tensor[indices, :]  # (num_queries, k)
 
         return distances, values
 
@@ -249,7 +247,7 @@ def build_calibration_data(
     source_path: str,
     references_path: str,
     max_length: int = 64,  # TODO: Debug 256,
-) -> CalibrationData:
+) -> DataStore:
     """
     Build calibration data from dev set using the specified model.
 
@@ -274,7 +272,7 @@ def build_calibration_data(
         Calibration data, including the losses (i.e. the quality) and log probabilities of the hypotheses.
     """
     # TODO: Rewrite
-    calibration_data = CalibrationData(num_beams)
+    calibration_data = DataStore(key_dim=model)
     comet_metric = evaluate.load('bleu')  # TODO: Change this back to comet
 
     model.eval()
@@ -343,18 +341,20 @@ if __name__ == "__main__":
 
     n_samples = 6000
     num_features = 128
-    value_dim = 10000
+    value_dim = 1
     dummy_data = torch.randn((n_samples, num_features))
     dummy_values = torch.randn((n_samples, value_dim))
     test_query = dummy_data.mean(dim=0).unsqueeze(0)
 
     datastore = DataStore(key_dim=num_features, value_dim=value_dim)
     datastore.add(dummy_data, dummy_values)
-    print(test_query)
     datastore.search_k(test_query, 10)
 
-    # datastore.read_features_and_train(
-    #    feature_dir=args.feature_dir,
-    #    output_dir=args.output_dir,
-    #    percentage=args.sample_percentage,
-    # )
+    print("Test saving")
+    datastore.save("./")
+
+    print("Test loading")
+    new_datastore = DataStore(key_dim=num_features, value_dim=value_dim)
+    new_datastore.load("./")
+    print(datastore.search_k(test_query, 10))
+    print(new_datastore.search_k(test_query, 10))

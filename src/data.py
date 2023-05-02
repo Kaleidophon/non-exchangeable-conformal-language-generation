@@ -27,8 +27,8 @@ class ParallelDataset(Dataset):
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
 
+        # TODO: Remove in the future, just for debugging
         """
-        # TODO: Debug
         line_break = 10
 
         # Process data
