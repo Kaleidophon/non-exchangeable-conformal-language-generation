@@ -23,7 +23,7 @@ from src.evaluation import evaluate_model
 
 # PROJECT
 from src.data import load_data
-from src.types import Device, WandBRun
+from src.custom_types import Device, WandBRun
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -119,7 +119,7 @@ def finetune_model(
 
     # Load data
     src_lang, tgt_lang = DATASETS[dataset]
-    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang).to(device)
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
@@ -129,7 +129,7 @@ def finetune_model(
     )
 
     # Initialize model
-    model = MBartForConditionalGeneration.from_pretrained(model_identifier)
+    model = MBartForConditionalGeneration.from_pretrained(model_identifier).to(device)
 
     # Finetune model
     optimizer = torch.optim.Adam(

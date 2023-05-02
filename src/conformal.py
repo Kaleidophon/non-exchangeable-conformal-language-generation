@@ -12,10 +12,41 @@ import torch
 
 # PROJECT
 from src.datastore import DataStore
-from src.types import Device
+from src.custom_types import Device
 
 # TYPES
 ConformalResult = namedtuple("ConformalResult", ["q_hat", "n_eff"])
+
+
+def simple_conformity_scores(predictions: torch.FloatTensor, targets: torch.LongTensor) -> torch.FloatTensor:
+    """
+    Compute conformity scores based on the predictions and targets.
+
+    Parameters
+    ----------
+    predictions: torch.FloatTensor
+        Predictions of the model.
+    targets: torch.LongTensor
+        Targets of the model.
+
+    Returns
+    -------
+    torch.FloatTensor
+        Conformity scores for each prediction-target pair.
+    """
+    # Compute conformity scores
+    target_probs = torch.gather(predictions, 1, targets.unsqueeze(1))
+    conformity_scores = 1 - target_probs
+
+    return conformity_scores
+
+
+def adaptive_conformity_score(predictions: torch.FloatTensor, targets: torch.LongTensor) -> torch.FloatTensor:
+    """
+    Compute adaptive conformity score based on the predictions and targets.
+    In comparison to the simple conformity score, the adaptive conformity score uses the cumulative sum or probabilities
+    until the target token is reached.
+    """
 
 
 class ConformalCalibrator:

@@ -4,25 +4,20 @@ Implementation of the datastore using FAISS. This implementation is heavily base
 """
 
 # STD
-from collections import namedtuple
-import dill
-from functools import reduce
-from operator import add
 import os
 from typing import Tuple
 
 # EXT
-from einops import rearrange
-import evaluate
 import faiss
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 # PROJECT
-from src.types import Device
+from src.custom_types import Device
 
 # CONST
 RAW_FEATURE_KEY_SUFFIX = ".pt"
@@ -184,8 +179,6 @@ def build_calibration_data(
     tokenizer: MBart50TokenizerFast,
     data_loader: DataLoader,
     num_beams: int,
-    source_path: str,
-    references_path: str,
     max_length: int = 64,  # TODO: Debug 256,
 ) -> DataStore:
     """
@@ -212,18 +205,9 @@ def build_calibration_data(
         Calibration data, including the losses (i.e. the quality) and log probabilities of the hypotheses.
     """
     # TODO: Rewrite
-    calibration_data = DataStore(key_dim=model)
-    comet_metric = evaluate.load('bleu')  # TODO: Change this back to comet
+    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1)
 
     model.eval()
-
-    # Load source sentences and references
-    with open(source_path, "r") as f:
-        sources = [line.strip() for line in f.readlines()]
-
-    # Load reference translations
-    with open(references_path, "r") as f:
-        references = [line.strip() for line in f.readlines()]
 
     for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
         batch_size = len(batch["input_ids"])
@@ -244,40 +228,50 @@ def build_calibration_data(
             output_scores=True,
             forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"]
         )
-        batch_translations = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
-        batch_scores = outputs.sequences_scores
+        decoder_states = outputs.decoder_hidden_states
+        predictions = F.softmax(outputs.logits, dim=-1)
 
-        # Duplicate references and sources for this batch since we have every source represented multiple times (for
-        # every beam) on the hypotheses
-        batch_references = reduce(add, [
-           [references[j]] * num_beams
-           for j in range(i * batch_size, (i + 1) * batch_size)
-        ])
-        batch_sources = reduce(add, [
-            [sources[j]] * num_beams
-            for j in range(i * batch_size, (i + 1) * batch_size)
-        ])
-        comet_scores = torch.FloatTensor([
-            comet_metric.compute(
-                predictions=[trans], references=[ref],  # sources=batch_sources
-            )["bleu"] / 100   # TODO: Change this back to comet
-            for trans, ref, source in zip(batch_translations, batch_references, batch_sources)
-        ])
-        batch_losses = 1 - comet_scores
+        # Compute non-conformity scores
 
-        # Do some reshaping
-        batch_losses = rearrange(batch_losses, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
-        batch_scores = rearrange(batch_scores, "(batch_size num_beams) -> batch_size num_beams", batch_size=batch_size)
 
         # Add calibration points
-        calibration_data.add_calibration_points(batch_losses, batch_scores)
+        ...  # TODO
 
     return calibration_data
 
 
 if __name__ == "__main__":
-    n_samples = 160000
-    num_features = 64
+    src_lang, tgt_lang = "de_DE", "en_XX"
+    model_identifier = "facebook/mbart-large-50-many-to-many-mmt"
+    dataset = "deen"
+    BATCH_SIZE = 6  # TODO: Debug 64
+    NUM_BEAMS = 4  # TODO: Debug
+
+    from src.data import load_data
+
+    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    data_loaders = load_data(
+        dataset, tokenizer, BATCH_SIZE, "cpu", "../data/wmt22",
+        padding="max_length",
+        max_length=64,
+        truncation=True,
+        load_splits=["train", "dev"]
+    )
+
+    # Initialize model
+    model = MBartForConditionalGeneration.from_pretrained(model_identifier)
+    num_features = model.config.d_model
+
+    # Populate datastore
+    datastore = build_calibration_data(
+        model,
+        tokenizer,
+        data_loaders["dev"],
+        num_beams=4,
+    )
+
+    """
+    n_samples = 50
     value_dim = 1
     dummy_data = torch.randn((n_samples, num_features))
     dummy_values = torch.randn((n_samples, value_dim))
@@ -287,3 +281,4 @@ if __name__ == "__main__":
     datastore.train_index(dummy_data)
     datastore.add(dummy_data, dummy_values)
     print(datastore.search_k(test_query, 10))
+    """

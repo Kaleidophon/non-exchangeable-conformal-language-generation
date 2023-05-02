@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 from typing import Tuple
 
 # PROJECT
-from src.types import Tokenizer, Device
+from src.custom_types import Tokenizer, Device
 
 # CONSTANTS
 SUFFIX = {
@@ -28,30 +28,30 @@ class ParallelDataset(Dataset):
         self.tokenizer_kwargs = tokenizer_kwargs
 
         # TODO: Remove in the future, just for debugging
-        """
-        line_break = 10
+        line_break = 50
 
         # Process data
+        """
         self.src_data = []
         for i, line in enumerate(src_data):
             if i > line_break:
                 break
 
-            self.src_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
+            self.src_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device))
 
         self.tgt_data = []
         for i, line in enumerate(tgt_data):
             if i > line_break:
                 break
 
-            self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
+            self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device))
         """
 
         self.src_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device) for line in src_data
         ]
         self.tgt_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device) for line in tgt_data
         ]
 
         self.length = len(self.src_data)
