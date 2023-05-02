@@ -48,10 +48,10 @@ class ParallelDataset(Dataset):
         """
 
         self.src_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device) for line in src_data
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
         ]
         self.tgt_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device) for line in tgt_data
+            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
         ]
 
         self.length = len(self.src_data)
@@ -64,10 +64,10 @@ class ParallelDataset(Dataset):
         tgt = self.tgt_data[idx]
 
         data = {
-            "input_ids": src["input_ids"].squeeze(0),
-            "attention_mask": src["attention_mask"].squeeze(0),
-            "decoder_input_ids": tgt["input_ids"].squeeze(0),
-            "labels": torch.cat([tgt["input_ids"].squeeze(0)[1:], torch.ones(1).long()]),
+            "input_ids": src["input_ids"].squeeze(0).to(self.device),
+            "attention_mask": src["attention_mask"].squeeze(0).to(self.device),
+            "decoder_input_ids": tgt["input_ids"].squeeze(0).to(self.device),
+            "labels": torch.cat([tgt["input_ids"].squeeze(0)[1:], torch.ones(1).long()]).to(self.device),
         }
 
         return data

@@ -47,6 +47,14 @@ def adaptive_conformity_score(predictions: torch.FloatTensor, targets: torch.Lon
     In comparison to the simple conformity score, the adaptive conformity score uses the cumulative sum or probabilities
     until the target token is reached.
     """
+    sorted_classes, index = torch.sort(-predictions)
+    sorted_probs = predictions[sorted_classes]
+    cum_probs = torch.cumsum(sorted_probs, dim=-1)
+    unsorted_cum_probs = torch.gather(cum_probs, -1, index.argsort(-1))
+
+    conformity_scores = torch.gather(unsorted_cum_probs, -1, targets.unsqueeze(1))
+
+    return conformity_scores
 
 
 class ConformalCalibrator:

@@ -119,7 +119,7 @@ def finetune_model(
 
     # Load data
     src_lang, tgt_lang = DATASETS[dataset]
-    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang).to(device)
+    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
