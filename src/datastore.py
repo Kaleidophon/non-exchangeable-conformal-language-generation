@@ -43,7 +43,7 @@ class DataStore:
         key_dim: int,
         value_dim: int,
         alpha: float = 0.9,
-        num_centroids: int = 10, #TODO: Debug 4096,
+        num_centroids: int = 4096,
         code_size: int = 64,
         num_probes: int = 32,
         use_quantization: bool = True,
@@ -292,6 +292,8 @@ if __name__ == "__main__":
         model,
         data_loaders["dev"],
     )
+
+    print(datastore.search_k(torch.randn(1, num_features), 100))
 
     """
     n_samples = 50
