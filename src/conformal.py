@@ -11,7 +11,6 @@ import numpy as np
 import torch
 
 # PROJECT
-from src.datastore import DataStore
 from src.custom_types import Device
 
 # TYPES
@@ -47,11 +46,10 @@ def adaptive_conformity_score(predictions: torch.FloatTensor, targets: torch.Lon
     In comparison to the simple conformity score, the adaptive conformity score uses the cumulative sum or probabilities
     until the target token is reached.
     """
-    sorted_classes, index = torch.sort(-predictions)
-    sorted_probs = predictions[sorted_classes]
+    sorted_classes, index = torch.sort(-predictions, dim=-1)
+    sorted_probs = torch.gather(predictions, -1, index)
     cum_probs = torch.cumsum(sorted_probs, dim=-1)
     unsorted_cum_probs = torch.gather(cum_probs, -1, index.argsort(-1))
-
     conformity_scores = torch.gather(unsorted_cum_probs, -1, targets.unsqueeze(1))
 
     return conformity_scores
@@ -63,7 +61,7 @@ class ConformalCalibrator:
     non-exchangeable conformal prediction, were some weights are taken into account when computing the quantile.
     """
 
-    def __init__(self, data_store: DataStore, alpha: float, temperature: float = 1.0, device: Device = "cpu", **kwargs):
+    def __init__(self, data_store, alpha: float, temperature: float = 1.0, device: Device = "cpu", **kwargs):
         """
         Initialize a conformal calibrator.
 
@@ -194,23 +192,9 @@ class ConformalCalibrator:
         Tuple[torch.FloatTensor, int]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
-        # TODO: Is there a way to make this more efficient?
-        # This has log K complexity for sorting, followed by three passes through K classes (one for the cumsum, one
-        # to create the prediction set and one to zero out the classes that are not in the prediction set). I would
-        # think that it would be more efficient to re-order the cumulative probs back into the original order of the
-        # classes instead of creating an intermediate set object.
         sorted_classes, index = torch.sort(-predictions)
-        sorted_probs = predictions[sorted_classes]
+        sorted_probs = torch.gather(predictions, -1, index)
         cum_probs = torch.cumsum(sorted_probs, dim=-1)
-
-        # TODO: Below is the old function logic. Delete when verified that more efficient version works
-        #pred_set = set(sorted_classes[cum_probs < q_hat])
-
-        #if len(pred_set) < len(predictions):
-        #    pred_set.add(sorted_classes[len(pred_set)])
-
-        #predictions[torch.range(0, len(predictions) - 1).long() not in pred_set] = 0
-        #predictions /= predictions.sum()
 
         # Adapted from https://stackoverflow.com/questions/52127723/pytorch-better-way-to-get-back-original-tensor-order
         # -after-torch-sort

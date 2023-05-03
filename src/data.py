@@ -31,7 +31,6 @@ class ParallelDataset(Dataset):
         line_break = 50
 
         # Process data
-        """
         self.src_data = []
         for i, line in enumerate(src_data):
             if i > line_break:
@@ -53,6 +52,7 @@ class ParallelDataset(Dataset):
         self.tgt_data = [
             self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
         ]
+        """
 
         self.length = len(self.src_data)
 

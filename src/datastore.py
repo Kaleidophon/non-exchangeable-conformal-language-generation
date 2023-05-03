@@ -8,6 +8,7 @@ import os
 from typing import Tuple
 
 # EXT
+from einops import rearrange
 import faiss
 import numpy as np
 import torch
@@ -17,11 +18,17 @@ from tqdm import tqdm
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 # PROJECT
+from src.conformal import simple_conformity_scores, adaptive_conformity_score
 from src.custom_types import Device
 
 # CONST
 RAW_FEATURE_KEY_SUFFIX = ".pt"
 RAW_FEATURE_VALUE_SUFFIX = "_values.pt"
+CONFORMITY_SCORES = {
+    "simple": simple_conformity_scores,
+    "adaptive": adaptive_conformity_score
+}
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class DataStore:
@@ -176,10 +183,9 @@ class DataStore:
 
 def build_calibration_data(
     model: MBartForConditionalGeneration,
-    tokenizer: MBart50TokenizerFast,
     data_loader: DataLoader,
-    num_beams: int,
-    max_length: int = 64,  # TODO: Debug 256,
+    conformity_score: str = "adaptive",
+    ignore_token_ids: Tuple[int] = (1, 2)
 ) -> DataStore:
     """
     Build calibration data from dev set using the specified model.
@@ -204,38 +210,50 @@ def build_calibration_data(
     CalibrationData
         Calibration data, including the losses (i.e. the quality) and log probabilities of the hypotheses.
     """
-    # TODO: Rewrite
+    assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
+                                                       f"'{conformity_score}' found."
+
     calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1)
 
     model.eval()
 
     for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
-        batch_size = len(batch["input_ids"])
 
         # Get input and target
         input_ids = batch["input_ids"].to(model.device)
         attention_mask = batch["attention_mask"].to(model.device)
+        decoder_input_ids = batch["decoder_input_ids"].to(model.device)
+        labels = batch["labels"].to(model.device)
 
         # Generate hypotheses
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            num_beams=num_beams,
-            max_length=max_length,
-            early_stopping=True,
-            num_return_sequences=num_beams,
-            return_dict_in_generate=True,
-            output_scores=True,
-            forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"]
-        )
-        decoder_states = outputs.decoder_hidden_states
+        with torch.no_grad():
+            outputs = model.forward(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                decoder_input_ids=decoder_input_ids,
+                return_dict=True,
+            )
+        decoder_states = outputs.decoder_hidden_states[-1]
         predictions = F.softmax(outputs.logits, dim=-1)
 
-        # Compute non-conformity scores
+        # Reshape and filter out ignore tokens
+        decoder_states = rearrange(decoder_states, "b s h -> (b s) h")
+        predictions = rearrange(predictions, "b s c -> (b s) c")
+        input_ids = rearrange(input_ids, "b s -> (b s)")
+        labels = rearrange(labels, "b s -> (b s)")
+        mask = torch.all(torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0)
+        decoder_states = decoder_states[mask]
+        predictions = predictions[mask]
+        labels = labels[mask]
 
+        # Compute non-conformity scores
+        conformity_scores = CONFORMITY_SCORES[conformity_score](predictions, labels)
+        print(conformity_scores)
 
         # Add calibration points
-        ...  # TODO
+        calibration_data.add(decoder_states, conformity_scores)
+        a = 3
 
     return calibration_data
 
@@ -245,7 +263,6 @@ if __name__ == "__main__":
     model_identifier = "facebook/mbart-large-50-many-to-many-mmt"
     dataset = "deen"
     BATCH_SIZE = 6  # TODO: Debug 64
-    NUM_BEAMS = 4  # TODO: Debug
 
     from src.data import load_data
 
@@ -265,9 +282,7 @@ if __name__ == "__main__":
     # Populate datastore
     datastore = build_calibration_data(
         model,
-        tokenizer,
         data_loaders["dev"],
-        num_beams=4,
     )
 
     """
