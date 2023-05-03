@@ -29,6 +29,7 @@ CONFORMITY_SCORES = {
     "adaptive": adaptive_conformity_score
 }
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["KMP_DUPLICATE_LIB_OK"] ="TRUE"
 
 
 class DataStore:
@@ -42,7 +43,7 @@ class DataStore:
         key_dim: int,
         value_dim: int,
         alpha: float = 0.9,
-        num_centroids: int = 4096,
+        num_centroids: int = 100, #TODO: Debug 4096,
         code_size: int = 64,
         num_probes: int = 32,
         use_quantization: bool = True,
@@ -141,7 +142,7 @@ class DataStore:
         :param keys_to_add: a numpy array of shape (num_keys, keys_dim)
         :return: The index will be updated with the input keys.
         """
-        self.index.add(keys)  # add vectors to the index
+        self.index.add(keys.cpu().numpy())  # add vectors to the index
         self.value_tensor = torch.cat(
             [self.value_tensor, values.to(torch.float16)], dim=0
         )
@@ -214,6 +215,8 @@ def build_calibration_data(
                                                        f"'{conformity_score}' found."
 
     calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1)
+    all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16)
+    all_conformity_scores = torch.empty((0, 1), dtype=torch.float16)
 
     model.eval()
 
@@ -249,11 +252,16 @@ def build_calibration_data(
 
         # Compute non-conformity scores
         conformity_scores = CONFORMITY_SCORES[conformity_score](predictions, labels)
-        print(conformity_scores)
 
-        # Add calibration points
-        calibration_data.add(decoder_states, conformity_scores)
-        a = 3
+        # Add to existing ones
+        all_hidden = torch.cat([all_hidden, decoder_states], dim=0)
+        conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
+
+    # Train index
+    calibration_data.train_index(all_hidden)
+
+    # Add calibration points
+    calibration_data.add(decoder_states, conformity_scores)
 
     return calibration_data
 

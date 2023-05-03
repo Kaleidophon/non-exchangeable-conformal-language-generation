@@ -103,7 +103,7 @@ def generate_test_translations(
             early_stopping=True
         )
 
-        outputs = tokenizer.decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
         translations += outputs
 
