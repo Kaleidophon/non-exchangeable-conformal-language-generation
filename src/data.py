@@ -36,14 +36,14 @@ class ParallelDataset(Dataset):
             if i > line_break:
                 break
 
-            self.src_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device))
+            self.src_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
 
         self.tgt_data = []
         for i, line in enumerate(tgt_data):
             if i > line_break:
                 break
 
-            self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs).to(device))
+            self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
         """
 
         self.src_data = [

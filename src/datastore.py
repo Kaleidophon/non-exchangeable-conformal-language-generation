@@ -43,7 +43,7 @@ class DataStore:
         key_dim: int,
         value_dim: int,
         alpha: float = 0.9,
-        num_centroids: int = 100, #TODO: Debug 4096,
+        num_centroids: int = 10, #TODO: Debug 4096,
         code_size: int = 64,
         num_probes: int = 32,
         use_quantization: bool = True,
