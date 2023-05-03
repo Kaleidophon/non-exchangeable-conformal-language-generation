@@ -20,9 +20,7 @@ import wandb
 
 # PROJECT
 from src.evaluation import evaluate_model
-
-# PROJECT
-from src.data import load_data
+from src.data import load_data, SUFFIX
 from src.custom_types import Device, WandBRun
 
 # CONST
@@ -172,8 +170,8 @@ def finetune_model(
                     model=model,
                     data_loader=data_loaders["dev"],
                     tokenizer=tokenizer,
-                    source_file=f"{data_dir}/{dataset}/dev.{src_lang[:2]}",
-                    reference_file=f"{data_dir}/{dataset}/dev.{tgt_lang[:2]}",
+                    source_file=f"{data_dir}/{dataset}/dev.{SUFFIX[src_lang[:2]]}",
+                    reference_file=f"{data_dir}/{dataset}/dev.{SUFFIX[tgt_lang[:2]]}",
                 )
 
                 model.train()
@@ -207,8 +205,8 @@ def finetune_model(
         model=model,
         data_loader=data_loaders["test"],
         tokenizer=tokenizer,
-        source_file=f"{data_dir}/{dataset}/test.{src_abbr}",
-        reference_file=f"{data_dir}/{dataset}/test.{tgt_abbr}",
+        source_file=f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}",
+        reference_file=f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}",
     )
 
     # Return results for knockkock and result file
