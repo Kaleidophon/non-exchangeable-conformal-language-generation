@@ -28,7 +28,7 @@ class ParallelDataset(Dataset):
         self.tokenizer_kwargs = tokenizer_kwargs
 
         # TODO: Remove in the future, just for debugging
-        line_break = 25
+        line_break = 2000
 
         # Process data
         self.src_data = []
@@ -44,6 +44,7 @@ class ParallelDataset(Dataset):
                 break
 
             self.tgt_data.append(self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs))
+
         """
 
         self.src_data = [
