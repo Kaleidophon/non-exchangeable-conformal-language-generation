@@ -43,7 +43,7 @@ NUM_TRAINING_STEPS = 40000
 NUM_WARMUP_STEPS = 2500
 LEARNING_RATE = 3e-05
 BETAS = (0.9, 0.98)
-VALIDATION_INTERVAL = 100  # TODO: Debug 1000
+VALIDATION_INTERVAL = 1000
 WEIGHT_DECAY = 0
 
 # GLOBALS
@@ -123,6 +123,7 @@ def finetune_model(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
+        truncation=True,
         load_splits=["train", "dev"]
     )
 

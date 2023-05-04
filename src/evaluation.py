@@ -67,21 +67,18 @@ def evaluate_model(
         result_dict["bleu"] = bleu_results["score"]
 
     if "comet" in metrics:
-        print("Evaluate COMET...")
+        # TODO: Comet doesn't actually give scores here for a weird reason
         comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
         comet_score = comet_metric.compute(
             predictions=translations, references=reference_translations, sources=source_sentences
         )
         result_dict["comet1"] = comet_score["scores"][0]
         result_dict["comet2"] = comet_score["scores"][1]
-        print(comet_score)
 
     if "chrf" in metrics:
-        print("Evaluate chrF...")
         chrf = evaluate.load("chrf")
         chrf_results = chrf.compute(predictions=translations, references=reference_translations)
         result_dict["chrf"] = chrf_results["score"]
-        print(chrf_results)
 
     return result_dict
 
