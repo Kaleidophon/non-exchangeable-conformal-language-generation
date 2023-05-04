@@ -52,28 +52,36 @@ def evaluate_model(
         reference_translations = [line.strip() for line in f.readlines()]
 
     # Generate translations
+    print("Generate translations...")
     translations = generate_test_translations(model, tokenizer, data_loader)
+    print(translations)
 
     # Evaluate translations
     result_dict = {}
 
     if "bleu" in metrics:
+        print("Evaluate BLEU...")
         bleu = evaluate.load("sacrebleu")
         bleu_results = bleu.compute(predictions=translations, references=reference_translations)
+        print(bleu_results)
         result_dict["bleu"] = bleu_results["score"]
 
     if "comet" in metrics:
+        print("Evaluate COMET...")
         comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
         comet_score = comet_metric.compute(
             predictions=translations, references=reference_translations, sources=source_sentences
         )
         result_dict["comet1"] = comet_score["scores"][0]
         result_dict["comet2"] = comet_score["scores"][1]
+        print(comet_score)
 
     if "chrf" in metrics:
+        print("Evaluate chrF...")
         chrf = evaluate.load("chrf")
         chrf_results = chrf.compute(predictions=translations, references=reference_translations)
         result_dict["chrf"] = chrf_results["score"]
+        print(chrf_results)
 
     return result_dict
 
@@ -104,7 +112,7 @@ def generate_test_translations(
             input_ids=batch["input_ids"],
             attention_mask=batch["attention_mask"],
             num_beams=4,
-            max_length=256,
+            max_length=128,
             early_stopping=True
         )
 
