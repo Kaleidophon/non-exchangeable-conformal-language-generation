@@ -6,7 +6,7 @@ wandb
 knockknock
 transformers==4.28.0
 unbabel-comet
-evaluate @ git+https://github.com/huggingface/evaluate@3fecf5df282dcbe3098c8023ea813922bb90fb34
+git+https://github.com/ricardorei/evaluate.git@update-comet#egg-evaluate
 dill
 einops
 faiss-cpu

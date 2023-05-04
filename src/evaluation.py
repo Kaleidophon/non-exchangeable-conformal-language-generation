@@ -59,7 +59,7 @@ def evaluate_model(
     bleu_results = bleu.compute(predictions=translations, references=reference_translations)
     result_dict["bleu"] = bleu_results["score"]
 
-    comet_metric = evaluate.load('comet')
+    comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
     comet_score = comet_metric.compute(
         predictions=translations, references=reference_translations, sources=source_sentences
     )
