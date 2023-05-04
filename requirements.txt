@@ -11,4 +11,4 @@ dill
 einops
 faiss-cpu
 faiss-gpu
-torch==1.11.0
+torch

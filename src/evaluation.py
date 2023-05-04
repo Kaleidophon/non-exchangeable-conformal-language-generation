@@ -55,7 +55,7 @@ def evaluate_model(
 
     # Evaluate translations
     result_dict = {}
-    bleu = evaluate.load("bleu")
+    bleu = evaluate.load("sacrebleu")
     bleu_results = bleu.compute(predictions=translations, references=reference_translations)
     result_dict["bleu"] = bleu_results["score"]
 
