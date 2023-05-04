@@ -176,12 +176,13 @@ def finetune_model(
 
                 model.train()
 
-            wandb_run.log(
-                {
-                    "val_loss": val_loss.detach().cpu().item(),
-                    **val_results
-                }
-            )
+            val_results = {
+                "val_loss": val_loss.detach().cpu().item(),
+                **val_results
+            }
+            print(val_results)
+
+            wandb_run.log(val_results)
 
     # Save model
     result_dir = f"{model_dir}/{dataset}_{timestamp}"
