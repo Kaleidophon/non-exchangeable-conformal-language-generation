@@ -123,7 +123,6 @@ def finetune_model(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
-        truncation=True,
         load_splits=["train", "dev"]
     )
 

@@ -28,7 +28,7 @@ class ParallelDataset(Dataset):
         self.tokenizer_kwargs = tokenizer_kwargs
 
         # TODO: Remove in the future, just for debugging
-        line_break = 2000
+        line_break = 2250
 
         # Process data
         self.src_data = []
@@ -126,7 +126,7 @@ def load_data(
 
         # Collate into dataloader
         split_dl = DataLoader(
-            dataset, batch_size=batch_size, shuffle=split_name == "train"
+            dataset, batch_size=batch_size
         )
         del src_split, tgt_split, dataset
 
