@@ -48,6 +48,7 @@ WEIGHT_DECAY = 0
 
 # GLOBALS
 SECRET_IMPORTED = False
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Knockknock support
 try:
@@ -172,6 +173,7 @@ def finetune_model(
                     tokenizer=tokenizer,
                     source_file=f"{data_dir}/{dataset}/dev.{SUFFIX[src_lang[:2]]}",
                     reference_file=f"{data_dir}/{dataset}/dev.{SUFFIX[tgt_lang[:2]]}",
+                    metrics=("bleu", "chrf")
                 )
 
                 model.train()

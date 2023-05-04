@@ -5,7 +5,7 @@ Module implementing necessary function for evaluating NMT models.
 # STD
 import re
 import subprocess
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 # EXT
 import evaluate
@@ -19,6 +19,7 @@ def evaluate_model(
     data_loader: DataLoader,
     source_file: str,
     reference_file: str,
+    metrics: Tuple[str] = ("bleu", "chrf", "comet"),
 ) -> Dict[str, float]:
     """
     Evaluate a model on the test set.
@@ -55,20 +56,24 @@ def evaluate_model(
 
     # Evaluate translations
     result_dict = {}
-    bleu = evaluate.load("sacrebleu")
-    bleu_results = bleu.compute(predictions=translations, references=reference_translations)
-    result_dict["bleu"] = bleu_results["score"]
 
-    comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
-    comet_score = comet_metric.compute(
-        predictions=translations, references=reference_translations, sources=source_sentences
-    )
-    result_dict["comet1"] = comet_score["scores"][0]
-    result_dict["comet2"] = comet_score["scores"][1]
+    if "bleu" in metrics:
+        bleu = evaluate.load("sacrebleu")
+        bleu_results = bleu.compute(predictions=translations, references=reference_translations)
+        result_dict["bleu"] = bleu_results["score"]
 
-    chrf = evaluate.load("chrf")
-    chrf_results = chrf.compute(predictions=translations, references=reference_translations)
-    result_dict["chrf"] = chrf_results["score"]
+    if "comet" in metrics:
+        comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
+        comet_score = comet_metric.compute(
+            predictions=translations, references=reference_translations, sources=source_sentences
+        )
+        result_dict["comet1"] = comet_score["scores"][0]
+        result_dict["comet2"] = comet_score["scores"][1]
+
+    if "chrf" in metrics:
+        chrf = evaluate.load("chrf")
+        chrf_results = chrf.compute(predictions=translations, references=reference_translations)
+        result_dict["chrf"] = chrf_results["score"]
 
     return result_dict
 
