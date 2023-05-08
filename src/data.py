@@ -48,12 +48,8 @@ class ParallelDataset(Dataset):
 
         """
 
-        self.src_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in src_data
-        ]
-        self.tgt_data = [
-            self.tokenizer(line.strip(), return_tensors="pt", **tokenizer_kwargs) for line in tgt_data
-        ]
+        self.src_data = [line.strip() for line in src_data]
+        self.tgt_data = [line.srip() for line in tgt_data]
 
         self.length = len(self.src_data)
 
@@ -61,8 +57,8 @@ class ParallelDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        src = self.src_data[idx]
-        tgt = self.tgt_data[idx]
+        src = self.tokenizer(self.src_data[idx], return_tensors="pt", **self.tokenizer_kwargs)
+        tgt = self.tokenizer(self.tgt_data[idx], return_tensors="pt", **self.tokenizer_kwargs)
 
         data = {
             "input_ids": src["input_ids"].squeeze(0).to(self.device),
