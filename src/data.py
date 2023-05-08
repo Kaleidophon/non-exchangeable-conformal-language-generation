@@ -49,7 +49,7 @@ class ParallelDataset(Dataset):
         """
 
         self.src_data = [line.strip() for line in src_data]
-        self.tgt_data = [line.srip() for line in tgt_data]
+        self.tgt_data = [line.strip() for line in tgt_data]
 
         self.length = len(self.src_data)
 
