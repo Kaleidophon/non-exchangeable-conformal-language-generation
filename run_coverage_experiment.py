@@ -10,16 +10,19 @@ from typing import Optional, Dict
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
+from einops import rearrange
 from knockknock import telegram_sender
 import torch
-from torch.utils.data import DataLoader
+import torch.nn.functional as F
+from tqdm import tqdm
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import wandb
 
 # PROJECT
 from src.data import load_data, SUFFIX
+from src.conformal import ConformalCalibrator
 from src.custom_types import Device, WandBRun
-from src.conformal import build_calibration_data, CalibrationData, get_optimal_k
+from src.datastore import DataStore
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -63,16 +66,19 @@ def run_experiments(
     model_identifier: str,
     dataset: str,
     batch_size: int,
-    num_beams: int,
+    conformity_method: str,
     alpha: float,
+    temperature: float,
+    num_neighbors: int,
+    num_centroids: int,
+    code_size: int,
+    num_probes: int,
+    use_quantization: bool,
     device: Device,
     data_dir: str,
     result_dir: str,
-    source_path: str,
-    references_path: str,
-    model_path: Optional[str] = None,
-    calibration_data_path: Optional[str] = None,
-    wandb_run: Optional[WandBRun] = None,
+    data_store_dir: str,
+    ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
 ):
     """
     Run experiments for conformal risk control in NLG.
@@ -110,59 +116,86 @@ def run_experiments(
         Dictionary containing the results of the experiments.
     """
     # Load or init model
-    if model_path is not None:
-        model = MBartForConditionalGeneration.from_pretrained(model_path)
-
-    else:
-        model = MBartForConditionalGeneration.from_pretrained(model_identifier)
-
+    model = MBartForConditionalGeneration.from_pretrained(model_identifier)
+    model.eval()
     tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier)
 
-    # Load data
+    # Load test data
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
-        load_splits=("dev", "test"),
+        load_splits=("test", ),
         padding="max_length",
         max_length=256,
         truncation=True
     )
+    data_loader = data_loaders["test"]
 
-    # Create generations on dev set, score them and create datastructure save the scores for easy access
-    calibration_data = None
-    if calibration_data_path is not None:
-        if os.path.exists(calibration_data_path):
-            calibration_data = CalibrationData.load(calibration_data_path)
+    # Load calibration data
+    data_store = DataStore(
+        key_dim=model.config.d_model, value_dim=1,
+        num_centroids=num_centroids, code_size=code_size,
+        num_probes=num_probes, use_quantization=use_quantization
+    )  # Create empty data store
+    data_store.load(data_store_dir)  # Load in contents
 
-    if calibration_data is None:
-        calibration_data = build_calibration_data(
-            model=model,
-            tokenizer=tokenizer,
-            data_loader=data_loaders["dev"],
-            num_beams=num_beams,
-            source_path=source_path,
-            references_path=references_path
-        )
+    # Init conformal calibrator
+    calibrator = ConformalCalibrator(
+        data_store,
+        alpha=alpha, temperature=temperature, device=device
+    )
 
-        if calibration_data_path is not None:
-            calibration_data.save(calibration_data_path)
+    # Use calibration data store to test coverage on test set
+    # Also collect the following statistics and save them with dill to plot later:
+    # - Prediction set sizes
+    # - Distances and weights
+    # - Conformity scores
+    # - Found quantiles q hat
+    # - The effective sample size
+    with torch.no_grad():
+        for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
+            # Get input and target
+            input_ids = batch["input_ids"].to(model.device)
+            attention_mask = batch["attention_mask"].to(model.device)
+            decoder_input_ids = batch["decoder_input_ids"].to(model.device)
+            labels = batch["labels"].to(model.device)
 
-    # Conduct experiments on test
-    optimal_k = get_optimal_k(calibration_data, alpha)
+            # Generate outputs
+            outputs = model.forward(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                decoder_input_ids=decoder_input_ids,
+                return_dict=True,
+            )
+            decoder_states = outputs.decoder_hidden_states[-1]
+            predictions = F.softmax(outputs.logits, dim=-1)
 
-    # Gather results and report them
-    del data_loaders["dev"]
+            # Reshape and filter out ignore tokens
+            decoder_states = rearrange(decoder_states, "b s h -> (b s) h")
+            predictions = rearrange(predictions, "b s c -> (b s) c")
+            input_ids = rearrange(input_ids, "b s -> (b s)")
+            labels = rearrange(labels, "b s -> (b s)")
+            mask = torch.all(torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0)
+            decoder_states = decoder_states[mask]
+            predictions = predictions[mask]
+            labels = labels[mask]
 
+            # Run the non-exchangeable conformal prediction
+            distances, conformity_scores = data_store.search_k(
+                decoder_states, k=num_neighbors
+            )
+            weights = calibrator.get_weights(distances)
+            conformal_result = calibrator.compute_q_hat(
+                weights, conformity_scores
+            )
+            q_hat = conformal_result.q_hat
+            prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, prediction_sets, q_hat)
 
+            # Evaluate
+            ...  # TODO
 
-def test_found_k(
-    model: MBartForConditionalGeneration,
-    tokenizer: MBart50TokenizerFast,
-    k: int,
-    test_loader: DataLoader
-) -> Dict[str, float]:
-    ... # TOOD: Implement
-
-
+        # Save results
+        ...  # TODO
 
 
 if __name__ == "__main__":
@@ -256,7 +289,6 @@ if __name__ == "__main__":
             model_identifier=args.model,
             dataset=args.dataset,
             batch_size=args.batch_size,
-            num_beams=args.num_beams,
             alpha=args.alpha,
             device=args.device,
             data_dir=args.data_dir,

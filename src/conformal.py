@@ -14,7 +14,7 @@ import torch
 from src.custom_types import Device
 
 # TYPES
-ConformalResult = namedtuple("ConformalResult", ["q_hat", "n_eff"])
+ConformalResult = namedtuple("ConformalResult", ["q_hat", "n_eff", "normed_weights"])
 
 
 def simple_conformity_scores(predictions: torch.FloatTensor, targets: torch.LongTensor) -> torch.FloatTensor:
@@ -150,7 +150,18 @@ class ConformalCalibrator:
 
         n_eff = np.sum(weights) / np.sum(weights ** 2)
 
-        return ConformalResult(q_hat=q_hat, n_eff=n_eff)
+        return ConformalResult(q_hat=q_hat, n_eff=n_eff, normed_weights=normed_weights)
+
+    def get_prediction_sets(
+        self,
+        method: str,
+        predictions: torch.FloatTensor,
+        q_hat: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        """
+        Compute the prediction set based on the predictions and the quantile.
+        """
+        return self.prediction_set_methods[method](predictions, q_hat)
 
     @staticmethod
     def compute_classic_prediction_set(predictions: torch.FloatTensor, q_hat: float) -> Tuple[torch.FloatTensor, int]:
@@ -169,6 +180,7 @@ class ConformalCalibrator:
         Tuple[torch.FloatTensor, int]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
+        # TODO: Vectorize q_hat
         set_size = torch.sum((predictions > q_hat).long()).numpy()
         predictions[predictions > q_hat] = 0
         predictions /= predictions.sum()
@@ -192,6 +204,7 @@ class ConformalCalibrator:
         Tuple[torch.FloatTensor, int]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
+        # TODO: Vectorize q_hat
         sorted_classes, index = torch.sort(-predictions)
         sorted_probs = torch.gather(predictions, -1, index)
         cum_probs = torch.cumsum(sorted_probs, dim=-1)
