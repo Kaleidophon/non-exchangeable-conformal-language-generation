@@ -42,12 +42,10 @@ class DataStore:
         self,
         key_dim: int,
         value_dim: int,
-        alpha: float = 0.9,
         num_centroids: int = 4096,
         code_size: int = 64,
         num_probes: int = 32,
         use_quantization: bool = True,
-        temperature: int = 10,
         device: Device = "cpu",
         index_file_name: str = "index.trained",
         token_ids_file_name: str = "token_ids.pt",
@@ -67,8 +65,6 @@ class DataStore:
             Number of bytes in quantized codes.
         num_probes: int
             Number of coarse-level quantizers.
-        temperature : int
-            Temperature as described in the paper.
         device : Device
             Device that the datastore lives on.
         index_file_name : str
@@ -86,7 +82,6 @@ class DataStore:
         self.num_centroids = num_centroids
         self.num_probes = num_probes
         self.code_size = code_size
-        self.alpha = alpha
 
         # Init index
         if use_quantization:
@@ -103,7 +98,6 @@ class DataStore:
             resources = faiss.StandardGpuResources()
             self.index = faiss.index_cpu_to_gpu(resources, 0, self.index, co)
 
-        self.temperature = temperature  # temperature as described in the paper
         self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16)
 
     def load(self, save_dir: str) -> None:
@@ -186,7 +180,8 @@ def build_calibration_data(
     model: MBartForConditionalGeneration,
     data_loader: DataLoader,
     conformity_score: str = "adaptive",
-    ignore_token_ids: Tuple[int] = (1, 2)
+    ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    **datastore_kwargs,
 ) -> DataStore:
     """
     Build calibration data from dev set using the specified model.
@@ -214,7 +209,7 @@ def build_calibration_data(
     assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
                                                        f"'{conformity_score}' found."
 
-    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1)
+    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1, **datastore_kwargs)
     all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16)
     all_conformity_scores = torch.empty((0, 1), dtype=torch.float16)
 
@@ -267,6 +262,7 @@ def build_calibration_data(
 
 
 if __name__ == "__main__":
+    # TODO: This is all just for debugging and tinkering, remove later
     src_lang, tgt_lang = "de_DE", "en_XX"
     model_identifier = "facebook/mbart-large-50-many-to-many-mmt"
     dataset = "deen"
