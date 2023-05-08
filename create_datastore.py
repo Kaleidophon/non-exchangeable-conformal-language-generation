@@ -14,8 +14,8 @@ import torch
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 # PROJECT
-from src.data import load_data, SUFFIX
-from src.datastore import DataStore, CONFORMITY_SCORES, build_calibration_data
+from src.data import load_data
+from src.datastore import CONFORMITY_SCORES, build_calibration_data
 from src.custom_types import Device
 
 # CONST
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--conformity-score",
-        type=int,
+        type=str,
         default="adaptive",
         choices=CONFORMITY_SCORES
     )
