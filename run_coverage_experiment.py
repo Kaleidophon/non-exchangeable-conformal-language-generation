@@ -5,8 +5,9 @@ Conduct experiments for conformal risk control in NLG.
 # STD
 import argparse
 from datetime import datetime
+import math
 import os
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
@@ -37,13 +38,14 @@ DATASETS = {
     "jaen": ("ja_XX", "en_XX")
 }
 
-CALIBRATION_DATA_PATH = "./data/calibration/calibration_data.npy"
+CALIBRATION_DATA_PATH = "./data/calibration/calibration_data.npy"  # TODO: Debug
 
 # DEFAULTS
 SEED = 1234
-BATCH_SIZE = 6  # TODO: Debug 64
-NUM_BEAMS = 4  # TODO: Debug
+BATCH_SIZE = 4
 ALPHA = 0.9
+TEMPERATURE = 1
+NUM_NEIGHBORS = 100
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -77,7 +79,7 @@ def run_experiments(
     device: Device,
     data_dir: str,
     result_dir: str,
-    data_store_dir: str,
+    datastore_dir: str,
     ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
 ):
     """
@@ -136,7 +138,7 @@ def run_experiments(
         num_centroids=num_centroids, code_size=code_size,
         num_probes=num_probes, use_quantization=use_quantization
     )  # Create empty data store
-    data_store.load(data_store_dir)  # Load in contents
+    data_store.load(datastore_dir)  # Load in contents
 
     # Init conformal calibrator
     calibrator = ConformalCalibrator(
@@ -181,17 +183,29 @@ def run_experiments(
             labels = labels[mask]
 
             # Run the non-exchangeable conformal prediction
-            distances, conformity_scores = data_store.search_k(
-                decoder_states, k=num_neighbors
-            )
-            weights = calibrator.get_weights(distances)
-            conformal_result = calibrator.compute_q_hat(
+            distances, conformity_scores = [], []
+
+            # This can be hard on memory so we do it in batches
+            bbatch_size = 1  # TODO: Debug batch_size
+            for i in range(0, len(decoder_states), bbatch_size):
+
+                batch_distances, batch_conformity_scores = data_store.search_k(
+                    decoder_states[i:i+bbatch_size, :], k=num_neighbors
+                )
+                distances.append(batch_distances)
+                conformity_scores.append(batch_conformity_scores)
+
+            distances = torch.cat(distances, dim=0) / math.sqrt(model.config.d_model)  # Normalize by hidden dim
+            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+            weights = calibrator.compute_weights(distances)
+            conformal_results = calibrator.compute_q_hat(
                 weights, conformity_scores
             )
-            q_hat = conformal_result.q_hat
-            prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, prediction_sets, q_hat)
+            q_hat = conformal_results["q_hat"]
+            prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
 
             # Evaluate
+            a = 3
             ...  # TODO
 
         # Save results
@@ -206,12 +220,7 @@ if __name__ == "__main__":
         default=MODEL_IDENTIFIER
     )
     parser.add_argument(
-        "--model-path",
-        type=str,
-        default=None
-    )
-    parser.add_argument(
-        "--calibration-data-path",
+        "--datastore-dir",
         type=str,
         default=CALIBRATION_DATA_PATH
     )
@@ -227,14 +236,45 @@ if __name__ == "__main__":
         default=BATCH_SIZE
     )
     parser.add_argument(
-        "--num-beams",
-        type=int,
-        default=NUM_BEAMS
+        "--conformity-method",
+        type=str,
+        choices=("simple", "adaptive"),
+        default="adaptive"
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=TEMPERATURE
+    )
+    parser.add_argument(
+        "--num-neighbors",
+        type=float,
+        default=NUM_NEIGHBORS
     )
     parser.add_argument(
         "--alpha",
         type=int,
         default=ALPHA
+    )
+    parser.add_argument(
+        "--use-quantization",
+        action="store_true",
+        default=False
+    )
+    parser.add_argument(
+        "--num-centroids",
+        type=int,
+        default=4096
+    )
+    parser.add_argument(
+        "--code-size",
+        type=int,
+        default=64
+    )
+    parser.add_argument(
+        "--num-probes",
+        type=int,
+        default=32
     )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
@@ -289,15 +329,18 @@ if __name__ == "__main__":
             model_identifier=args.model,
             dataset=args.dataset,
             batch_size=args.batch_size,
+            conformity_method=args.conformity_method,
             alpha=args.alpha,
+            temperature=args.temperature,
+            num_neighbors=args.num_neighbors,
+            use_quantization=args.use_quantization,
+            num_centroids=args.num_centroids,
+            code_size=args.code_size,
+            num_probes=args.num_probes,
+            datastore_dir=args.datastore_dir,
             device=args.device,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
-            source_path=source_path,
-            references_path=references_path,
-            model_path=args.model_path,
-            calibration_data_path=args.calibration_data_path,
-            wandb_run=wandb_run
         )
 
     except Exception as e:

@@ -126,31 +126,31 @@ class ConformalCalibrator:
         Tuple[float, float]
             NamedTuple of (q_hat, n_eff) where q_hat is the computed quantile and n_eff is the effective sample size.
         """
-        weights = weights.cpu().numpy()
-
         # Normalize weights
-        normed_weights = weights / (np.sum(weights) + 1)
+        normed_weights = weights / (torch.sum(weights, dim=-1, keepdim=True) + 1)
 
         # Sort by conformal score ascending since we're trying to find the smallest q
-        sorted_weights_and_scores = sorted(
-            zip(normed_weights, conformity_scores), key=lambda tpl: tpl[1]
-        )
+        sorted_conformity_scores, index = torch.sort(conformity_scores)
+        sorted_weights = torch.gather(normed_weights, -1, index)
 
         # Find the smallest q (compared to conformal scores)
         # for which the sum of corresponding weights is bigger equal than 1 - alpha
-        q_hat = np.inf
-        cumsum = 0
+        cumsum = torch.cumsum(sorted_weights, dim=-1)
+        mask = (cumsum >= (1 - self.alpha)).long()
+        threshold_index = torch.argmax(mask, dim=-1)
+        q_hat = torch.gather(sorted_conformity_scores, -1, threshold_index.unsqueeze(-1)).squeeze(-1)
 
-        for weight, score in sorted_weights_and_scores:
-            if cumsum >= 1 - self.alpha:
-                q_hat = score
-                break
+        # Make q_hat infinity in cases where the threshold was never reached
+        infinity_mask = mask.sum(dim=-1) == 0
+        q_hat[infinity_mask] = torch.inf
 
-            cumsum += weight
+        n_eff = torch.sum(weights, dim=-1) / torch.sum(weights ** 2, dim=-1)
 
-        n_eff = np.sum(weights) / np.sum(weights ** 2)
-
-        return ConformalResult(q_hat=q_hat, n_eff=n_eff, normed_weights=normed_weights)
+        return {
+            "q_hat": q_hat,
+            "n_eff": n_eff,
+            "normed_weights": normed_weights
+        }
 
     def get_prediction_sets(
         self,
@@ -164,7 +164,7 @@ class ConformalCalibrator:
         return self.prediction_set_methods[method](predictions, q_hat)
 
     @staticmethod
-    def compute_classic_prediction_set(predictions: torch.FloatTensor, q_hat: float) -> Tuple[torch.FloatTensor, int]:
+    def compute_classic_prediction_set(predictions: torch.FloatTensor, q_hat: torch.FloatTensor) -> Tuple[torch.FloatTensor, int]:
         """
         Compute the classic prediction set based on the predictions and the quantile.
 
@@ -180,15 +180,16 @@ class ConformalCalibrator:
         Tuple[torch.FloatTensor, int]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
-        # TODO: Vectorize q_hat
-        set_size = torch.sum((predictions > q_hat).long()).numpy()
-        predictions[predictions > q_hat] = 0
-        predictions /= predictions.sum()
+        q_hat = q_hat.unsqueeze(-1).repeat(1, predictions.shape[-1])
+        set_sizes = torch.sum((predictions > q_hat).long(), -1).numpy()
 
-        return predictions, set_size
+        predictions[predictions > q_hat] = 0
+        predictions /= predictions.sum(-1, keepdim=True)
+
+        return predictions, set_sizes
 
     @staticmethod
-    def compute_adaptive_prediction_set(predictions: torch.FloatTensor, q_hat: float) -> Tuple[torch.FloatTensor, int]:
+    def compute_adaptive_prediction_set(predictions: torch.FloatTensor, q_hat: torch.FloatTensor) -> Tuple[torch.FloatTensor, int]:
         """
         Compute the adaptive prediction set based on the predictions and the quantile.
 
@@ -204,16 +205,30 @@ class ConformalCalibrator:
         Tuple[torch.FloatTensor, int]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
-        # TODO: Vectorize q_hat
-        sorted_classes, index = torch.sort(-predictions)
+        sorted_classes, index = torch.sort(-predictions)  # Sort descendingly
         sorted_probs = torch.gather(predictions, -1, index)
         cum_probs = torch.cumsum(sorted_probs, dim=-1)
+        q_hat = q_hat.unsqueeze(-1).repeat(1, predictions.shape[-1])
 
+        # Because adaptive prediction sets are supposed to include one more class than the ones that would come out of
+        # the comparisons between the cumulative probabilities and q_hat (to avoid empty predictions sets), we adjust
+        # q_hat by adding the difference to the next cumulative probability that would otherwise not be included.
+        diffs = cum_probs - q_hat  # The value we are looking for here will be the smallest positive value per row
+        diffs[diffs <= 0] = 1  # Second: Set all 0s to 1 to make sure that we don't pick them
+        offset_values = torch.min(diffs, dim=-1, keepdim=True)[0]  # Third: Find the smallest positive value per row
+        offset_values += 5e-3  # Add small value so that we include the minimum value as well
+        # (The value has a strange value to accommodate errors caused floating point precision)
+        q_hat[torch.isinf(q_hat)] = 0  # Remove infinity values, these will be replaced by > 1, so functionally the same
+        q_hat += offset_values
+
+        # Compute set sizes
+        set_sizes = torch.sum((cum_probs < q_hat).long(), -1).numpy()
+
+        # Compute actual prediction sets
         # Adapted from https://stackoverflow.com/questions/52127723/pytorch-better-way-to-get-back-original-tensor-order
         # -after-torch-sort
-        set_size = torch.sum((cum_probs < q_hat).long()).numpy()
         unsorted_cum_probs = torch.gather(cum_probs, -1, index.argsort(-1))
-        predictions[unsorted_cum_probs < q_hat] = 0
-        predictions /= predictions.sum()
+        predictions[unsorted_cum_probs >= q_hat] = 0
+        predictions /= predictions.sum(-1, keepdim=True)
 
-        return predictions, set_size
+        return predictions, set_sizes

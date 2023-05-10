@@ -87,7 +87,7 @@ class DataStore:
         if use_quantization:
             quantizer = faiss.IndexFlatIP(self.key_dim)
             self.index = faiss.IndexIVFPQ(quantizer, self.key_dim, self.num_centroids, self.code_size, 8)
-            self.index.nprobe = 32
+            self.index.nprobe = num_probes
 
         else:
             self.index = faiss.IndexFlatIP(self.key_dim)
@@ -110,9 +110,7 @@ class DataStore:
             Directory containing index.trained (the trained index) and token_ids.pt (token ids sorted by index id).
         """
         self.index = faiss.read_index(os.path.join(save_dir, self.index_file_name))
-        self.value_tensor = torch.tensor(
-            torch.load(os.path.join(save_dir, self.token_ids_file_name))
-        )
+        self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name))
 
     def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1000000) -> None:
         """
@@ -161,16 +159,21 @@ class DataStore:
         except Exception as e:
             raise IOError(f"Encountered error when saving torch tensor to {output_dir}: {e}")
 
-    def search_k(self, query: torch.tensor, k: int) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    def search_k(self, query: torch.FloatTensor, k: int) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         Search for the top K nearest neighbors, along with the distance.
         :param k: top k
         :param query: should have shape (num_queries, dim_keys).
         :return: scores: should have shape (num_queries, vocab_size), contains scores for each token for each entry
         """
+        query = query.cpu().numpy()
+
         distances, indices = self.index.search(
             query, k
         )  # D, I will have shape (num_queries, k), containing the distance and the index
+
+        distances, indices = torch.FloatTensor(distances), torch.LongTensor(indices)
+
         values = self.value_tensor[indices, :]  # (num_queries, k)
 
         return distances, values
