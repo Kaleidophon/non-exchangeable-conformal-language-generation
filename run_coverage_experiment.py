@@ -11,6 +11,7 @@ from typing import Optional, Dict, Tuple
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
+import dill
 from einops import rearrange
 from knockknock import telegram_sender
 import torch
@@ -153,6 +154,14 @@ def run_experiments(
     # - Conformity scores
     # - Found quantiles q hat
     # - The effective sample size
+    all_set_sizes = []
+    coverage = []
+    avg_distances = []
+    avg_weights = []
+    avg_conformity_scores = []
+    all_n_effs = []
+    all_q_hats = []
+
     with torch.no_grad():
         for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
             # Get input and target
@@ -203,13 +212,41 @@ def run_experiments(
             )
             q_hat = conformal_results["q_hat"]
             prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
+            all_set_sizes += list(set_sizes)
 
             # Evaluate
-            a = 3
-            ...  # TODO
+            label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+            is_covered = list((label_probs > 0).float().numpy())
+            coverage += is_covered
+
+            # Add results for this batch
+            avg_distances += list(distances.mean(dim=-1).cpu().numpy())
+            avg_weights += list(weights.mean(dim=-1).cpu().numpy())
+            avg_conformity_scores += list(conformity_scores.mean(dim=-1).cpu().numpy())
+            all_n_effs += list(conformal_results["n_eff"].cpu().numpy())
+            all_q_hats += list(q_hat.cpu().numpy())
 
         # Save results
-        ...  # TODO
+        coverage = sum(coverage) / len(coverage)
+
+        results = {
+            "coverage": coverage,
+            "avg_distances": avg_distances,
+            "avg_weights": avg_weights,
+            "avg_conformity_scores": avg_conformity_scores,
+            "all_n_effs": all_n_effs,
+            "all_q_hats": all_q_hats,
+            "all_set_sizes": all_set_sizes
+        }
+
+        timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
+        file_name = f"{timestamp}_{dataset}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}.pkl"
+
+        if not os.path.exists(result_dir):
+            os.makedirs(result_dir)
+
+        with open(os.path.join(result_dir, file_name), "wb") as result_file:
+            dill.dump(results, result_file)
 
 
 if __name__ == "__main__":
