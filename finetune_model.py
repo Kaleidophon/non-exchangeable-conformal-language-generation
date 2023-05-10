@@ -41,10 +41,12 @@ BATCH_SIZE = 4
 SEQUENCE_LENGTH = 128
 NUM_TRAINING_STEPS = 40000
 NUM_WARMUP_STEPS = 2500
-LEARNING_RATE = 3e-05
+LEARNING_RATE = 1e-05  # From 3e-05
 BETAS = (0.9, 0.98)
 VALIDATION_INTERVAL = 1000
-WEIGHT_DECAY = 0.2
+WEIGHT_DECAY = 0
+DROPOUT = 0.3
+ATTENTION_DROPOUT = 0.1
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -129,6 +131,10 @@ def finetune_model(
 
     # Initialize model
     model = MBartForConditionalGeneration.from_pretrained(model_identifier).to(device)
+
+    # Set dropout
+    model.config.dropout = DROPOUT
+    model.config.attention_dropout = ATTENTION_DROPOUT
 
     # Finetune model
     optimizer = torch.optim.Adam(
