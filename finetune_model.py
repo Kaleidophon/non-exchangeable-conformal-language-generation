@@ -13,6 +13,7 @@ from typing import Optional
 import torch
 from transformers.optimization import get_inverse_sqrt_schedule
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers.models.mbart.modeling_mbart import MBartEncoderLayer, MBartAttention, MBartDecoderLayer
 from codecarbon import OfflineEmissionsTracker
 from knockknock import telegram_sender
 import numpy as np
@@ -37,10 +38,10 @@ DATASETS = {
 
 # DEFAULTS
 SEED = 1234
-BATCH_SIZE = 4
+BATCH_SIZE = 32
 SEQUENCE_LENGTH = 128
 NUM_TRAINING_STEPS = 40000
-NUM_WARMUP_STEPS = 2500
+NUM_WARMUP_STEPS = 5000
 LEARNING_RATE = 1e-05  # From 3e-05
 BETAS = (0.9, 0.98)
 VALIDATION_INTERVAL = 1000
@@ -133,8 +134,12 @@ def finetune_model(
     model = MBartForConditionalGeneration.from_pretrained(model_identifier).to(device)
 
     # Set dropout
-    model.config.dropout = DROPOUT
-    model.config.attention_dropout = ATTENTION_DROPOUT
+    for module in model.modules():
+        if isinstance(module, MBartAttention):
+            module.dropout = ATTENTION_DROPOUT
+
+        elif isinstance(module, MBartEncoderLayer) or isinstance(module, MBartDecoderLayer):
+            module.dropout = DROPOUT
 
     # Finetune model
     optimizer = torch.optim.Adam(

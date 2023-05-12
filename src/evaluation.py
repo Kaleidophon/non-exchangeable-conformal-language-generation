@@ -110,7 +110,8 @@ def generate_test_translations(
             attention_mask=batch["attention_mask"],
             num_beams=4,
             max_length=128,
-            early_stopping=True
+            early_stopping=True,
+            decoder_start_token_id=tokenizer.lang_code_to_id["en_XX"]
         )
 
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
