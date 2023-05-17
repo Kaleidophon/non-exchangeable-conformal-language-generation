@@ -11,7 +11,7 @@ import os
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 
 # PROJECT
 from src.data import load_data
@@ -23,11 +23,11 @@ DATA_DIR = "./data/wmt22"
 MODEL_DIR = "./models"
 EMISSION_DIR = "./emissions"
 PROJECT_NAME = "nlg-conformal-risk-control"
-MODEL_IDENTIFIER = "facebook/mbart-large-50-many-to-many-mmt"
+MODEL_IDENTIFIER = "facebook/m2m100_418M"
 # Map available language pairs to language identifiers for tokenizer
 DATASETS = {
-    "deen": ("de_DE", "en_XX"),
-    "jaen": ("ja_XX", "en_XX")
+    "deen": ("de", "en"),
+    "jaen": ("ja", "en")
 }
 
 # DEFAULTS
@@ -74,7 +74,7 @@ def create_datastore(
 
     # Load data
     src_lang, tgt_lang = DATASETS[dataset]
-    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
@@ -84,7 +84,7 @@ def create_datastore(
     )
 
     # Initialize model
-    model = MBartForConditionalGeneration.from_pretrained(model_identifier).to(device)
+    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
     model.eval()
 
     # Populate data score
