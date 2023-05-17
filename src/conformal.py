@@ -102,7 +102,7 @@ class ConformalCalibrator:
         torch.FloatTensor
             (Unnormalized) weights for each retrieved neighbor based on the neighbor's distance.
         """
-        weights = np.exp(-self.temperature * distances)
+        weights = torch.exp(-self.temperature * distances)
 
         return weights
 
