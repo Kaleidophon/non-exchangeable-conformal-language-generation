@@ -17,7 +17,7 @@ from knockknock import telegram_sender
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 import wandb
 
 # PROJECT
@@ -31,15 +31,13 @@ DATA_DIR = "./data/wmt22"
 MODEL_DIR = "./models/"
 RESULT_DIR = "./results"
 EMISSION_DIR = "./emissions"
-MODEL_IDENTIFIER = "facebook/mbart-large-50-many-to-many-mmt"
+MODEL_IDENTIFIER = "facebook/m2m100_418M"
 PROJECT_NAME = "nlg-conformal-risk-control"
 # Map available language pairs to language identifiers for tokenizer
 DATASETS = {
-    "deen": ("de_DE", "en_XX"),
-    "jaen": ("ja_XX", "en_XX")
+    "deen": ("de", "en"),
+    "jaen": ("ja", "en")
 }
-
-CALIBRATION_DATA_PATH = "./data/calibration/calibration_data.npy"  # TODO: Debug
 
 # DEFAULTS
 SEED = 1234
@@ -119,9 +117,9 @@ def run_experiments(
         Dictionary containing the results of the experiments.
     """
     # Load or init model
-    model = MBartForConditionalGeneration.from_pretrained(model_identifier)
+    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier)
     model.eval()
-    tokenizer = MBart50TokenizerFast.from_pretrained(model_identifier)
+    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier)
 
     # Load test data
     data_loaders = load_data(
@@ -137,7 +135,8 @@ def run_experiments(
     data_store = DataStore(
         key_dim=model.config.d_model, value_dim=1,
         num_centroids=num_centroids, code_size=code_size,
-        num_probes=num_probes, use_quantization=use_quantization
+        num_probes=num_probes, use_quantization=use_quantization,
+        device=device
     )  # Create empty data store
     data_store.load(datastore_dir)  # Load in contents
 
@@ -259,7 +258,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--datastore-dir",
         type=str,
-        default=CALIBRATION_DATA_PATH
     )
     parser.add_argument(
         "--dataset",
@@ -301,7 +299,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-centroids",
         type=int,
-        default=4096
+        default=2048
     )
     parser.add_argument(
         "--code-size",
@@ -386,3 +384,7 @@ if __name__ == "__main__":
             tracker.stop()
 
         raise e
+
+    finally:
+        if tracker is not None:
+            tracker.stop()

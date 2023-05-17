@@ -195,3 +195,7 @@ if __name__ == "__main__":
             tracker.stop()
 
         raise e
+
+    finally:
+        if tracker is not None:
+            tracker.stop()
