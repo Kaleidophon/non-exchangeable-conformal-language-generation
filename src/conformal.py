@@ -161,7 +161,7 @@ class ConformalCalibrator:
         """
         Compute the prediction set based on the predictions and the quantile.
         """
-        return self.prediction_set_methods[method](predictions, q_hat)
+        return self.prediction_set_methods[method](predictions.to(self.device), q_hat.to(self.device))
 
     @staticmethod
     def compute_classic_prediction_set(predictions: torch.FloatTensor, q_hat: torch.FloatTensor) -> Tuple[torch.FloatTensor, int]:
