@@ -185,7 +185,9 @@ def run_experiments(
             predictions = rearrange(predictions, "b s c -> (b s) c")
             input_ids = rearrange(input_ids, "b s -> (b s)")
             labels = rearrange(labels, "b s -> (b s)")
-            mask = torch.all(torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0)
+            mask = torch.all(
+                torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+            ).to(device)
             decoder_states = decoder_states[mask]
             predictions = predictions[mask]
             labels = labels[mask]
@@ -215,7 +217,7 @@ def run_experiments(
 
             # Evaluate
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
-            is_covered = list((label_probs > 0).float().numpy())
+            is_covered = list((label_probs > 0).float().cpu().numpy())
             coverage += is_covered
 
             # Add results for this batch
@@ -227,6 +229,8 @@ def run_experiments(
 
         # Save results
         coverage = sum(coverage) / len(coverage)
+
+        print(f"Coverage: {coverage:.4f}")
 
         results = {
             "coverage": coverage,
