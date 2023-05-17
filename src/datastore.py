@@ -123,7 +123,7 @@ class DataStore:
             size=[min(max_training_keys, len(key_data))],
             replace=False,
         )
-        self.index.train(key_data[random_indices, :])
+        self.index.train(key_data[random_indices, :].cpu().numpy())
 
         if self.device != "cpu":
             self.index = faiss.index_gpu_to_cpu(self.index)  # put back to CPU
