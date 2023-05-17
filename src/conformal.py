@@ -181,7 +181,7 @@ class ConformalCalibrator:
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
         q_hat = q_hat.unsqueeze(-1).repeat(1, predictions.shape[-1])
-        set_sizes = torch.sum((predictions > q_hat).long(), -1).numpy()
+        set_sizes = torch.sum((predictions > q_hat).cpu().long(), -1).numpy()
 
         predictions[predictions > q_hat] = 0
         predictions /= predictions.sum(-1, keepdim=True)
@@ -222,7 +222,7 @@ class ConformalCalibrator:
         q_hat += offset_values
 
         # Compute set sizes
-        set_sizes = torch.sum((cum_probs < q_hat).long(), -1).numpy()
+        set_sizes = torch.sum((cum_probs < q_hat).long(), -1).cpu().numpy()
 
         # Compute actual prediction sets
         # Adapted from https://stackoverflow.com/questions/52127723/pytorch-better-way-to-get-back-original-tensor-order
