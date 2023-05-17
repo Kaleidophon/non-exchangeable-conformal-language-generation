@@ -136,12 +136,12 @@ class ConformalCalibrator:
         # Find the smallest q (compared to conformal scores)
         # for which the sum of corresponding weights is bigger equal than 1 - alpha
         cumsum = torch.cumsum(sorted_weights, dim=-1)
-        mask = (cumsum >= (1 - self.alpha)).long()
+        mask = (cumsum >= (1 - self.alpha)).long().to(self.device)
         threshold_index = torch.argmax(mask, dim=-1)
         q_hat = torch.gather(sorted_conformity_scores, -1, threshold_index.unsqueeze(-1)).squeeze(-1)
 
         # Make q_hat infinity in cases where the threshold was never reached
-        infinity_mask = mask.sum(dim=-1) == 0
+        infinity_mask = (mask.sum(dim=-1) == 0).to(self.device)
         q_hat[infinity_mask] = torch.inf
 
         n_eff = torch.sum(weights, dim=-1) / torch.sum(weights ** 2, dim=-1)

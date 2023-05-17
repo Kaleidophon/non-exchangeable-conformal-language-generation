@@ -110,7 +110,7 @@ class DataStore:
             Directory containing index.trained (the trained index) and token_ids.pt (token ids sorted by index id).
         """
         self.index = faiss.read_index(os.path.join(save_dir, self.index_file_name))
-        self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name))
+        self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name)).to(self.device)
 
     def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1000000) -> None:
         """
