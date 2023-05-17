@@ -117,7 +117,7 @@ def run_experiments(
         Dictionary containing the results of the experiments.
     """
     # Load or init model
-    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier)
+    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
     model.eval()
     tokenizer = M2M100Tokenizer.from_pretrained(model_identifier)
 
