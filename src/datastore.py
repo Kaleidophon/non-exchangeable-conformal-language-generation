@@ -42,7 +42,7 @@ class DataStore:
         self,
         key_dim: int,
         value_dim: int,
-        num_centroids: int = 4096,
+        num_centroids: int = 2048,
         code_size: int = 64,
         num_probes: int = 32,
         use_quantization: bool = True,
@@ -213,7 +213,7 @@ def build_calibration_data(
     assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
                                                        f"'{conformity_score}' found."
 
-    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1, **datastore_kwargs)
+    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1, device=device, **datastore_kwargs)
     all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16).to(device)
     all_conformity_scores = torch.empty((0, 1), dtype=torch.float16).to(device)
 

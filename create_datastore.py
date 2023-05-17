@@ -140,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-centroids",
         type=int,
-        default=4096
+        default=2048
     )
     parser.add_argument(
         "--code-size",
