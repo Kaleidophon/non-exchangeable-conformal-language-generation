@@ -94,6 +94,7 @@ def create_datastore(
         num_centroids=num_centroids,
         code_size=code_size,
         num_probes=num_probes,
+        device=device,
     )
 
     # Save datastore
