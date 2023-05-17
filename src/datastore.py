@@ -98,7 +98,7 @@ class DataStore:
             resources = faiss.StandardGpuResources()
             self.index = faiss.index_cpu_to_gpu(resources, 0, self.index, co)
 
-        self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16)
+        self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16).to(device)
 
     def load(self, save_dir: str) -> None:
         """
@@ -176,7 +176,7 @@ class DataStore:
 
         values = self.value_tensor[indices, :]  # (num_queries, k)
 
-        return distances, values
+        return distances.to(self.device), values.to(self.device)
 
 
 def build_calibration_data(
@@ -184,6 +184,7 @@ def build_calibration_data(
     data_loader: DataLoader,
     conformity_score: str = "adaptive",
     ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    device: Device = "cpu",
     **datastore_kwargs,
 ) -> DataStore:
     """
@@ -213,8 +214,8 @@ def build_calibration_data(
                                                        f"'{conformity_score}' found."
 
     calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1, **datastore_kwargs)
-    all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16)
-    all_conformity_scores = torch.empty((0, 1), dtype=torch.float16)
+    all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16).to(device)
+    all_conformity_scores = torch.empty((0, 1), dtype=torch.float16).to(device)
 
     model.eval()
 
