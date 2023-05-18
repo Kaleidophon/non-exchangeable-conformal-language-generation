@@ -175,9 +175,17 @@ class DataStore:
         # TODO: Debug
         import time
         print(distances, indices)
-        time.sleep(2)
+        time.sleep(0.5)
 
         distances, indices = torch.FloatTensor(distances), torch.LongTensor(indices)
+
+        found_mask = indices != -1
+
+        if found_mask.long().sum() == 0:
+            raise ValueError("No matching keys found in the index.")
+
+        distances = distances[found_mask]
+        indices = indices[found_mask]
 
         values = self.value_tensor[indices, :]  # (num_queries, k)
 

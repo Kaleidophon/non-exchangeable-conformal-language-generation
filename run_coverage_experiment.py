@@ -205,7 +205,7 @@ def run_experiments(
                 distances.append(batch_distances)
                 conformity_scores.append(batch_conformity_scores)
 
-            distances = torch.cat(distances, dim=0) / math.sqrt(model.config.d_model)  # Normalize by hidden dim
+            distances = torch.cat(distances, dim=0)
             conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
             weights = calibrator.compute_weights(distances)
             conformal_results = calibrator.compute_q_hat(
