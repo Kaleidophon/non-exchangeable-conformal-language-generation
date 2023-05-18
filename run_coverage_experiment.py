@@ -188,7 +188,7 @@ def run_experiments(
             mask = torch.all(
                 torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
             ).to(device)
-            decoder_states = decoder_states[mask]
+            decoder_states = decoder_states[mask] / model.config.d_model ** 0.25
             predictions = predictions[mask]
             labels = labels[mask]
 

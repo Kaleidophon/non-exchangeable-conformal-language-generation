@@ -121,11 +121,12 @@ class DataStore:
         :return: None. The index attribute will be updated after training.
         """
         random_indices = np.random.choice(
-            np.arange(len(key_data)),
+            np.arange(key_data.shape[0]),
             size=[min(max_training_keys, len(key_data))],
             replace=False,
         )
-        self.index.train(key_data[random_indices, :].cpu().numpy())
+        train_data = key_data[random_indices, :].cpu().numpy()
+        self.index.train(train_data)
 
         if self.device != "cpu":
             self.index = faiss.index_gpu_to_cpu(self.index)  # put back to CPU
@@ -266,7 +267,7 @@ def build_calibration_data(
 
         # Add to existing ones
         all_hidden = torch.cat([all_hidden, decoder_states], dim=0)
-        conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
+        all_conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
 
     # Normalize distances by dimensionality to make distance computation easier
     # We want to scale the inner products "transformer attention-style" by the square root of the hidden dimensionality,
@@ -285,6 +286,6 @@ def build_calibration_data(
 
     # Add calibration points
     print(f"Adding {num_latents} data points to the index...")
-    calibration_data.add(decoder_states, conformity_scores)
+    calibration_data.add(all_hidden, all_conformity_scores)
 
     return calibration_data
