@@ -287,7 +287,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num-neighbors",
-        type=float,
+        type=int,
         default=NUM_NEIGHBORS
     )
     parser.add_argument(
