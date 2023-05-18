@@ -261,8 +261,14 @@ def build_calibration_data(
         all_hidden = torch.cat([all_hidden, decoder_states], dim=0)
         conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
 
-    # Train index
+    # Normalize distances by dimensionality to make distance computation easier
+    # We want to scale the inner products "transformer attention-style" by the square root of the hidden dimensionality,
+    # but faiss only implements either L2 or inner product as distances. So instead, we can just scale the latents now
+    # by the forth root of the dimensionality, which using the inner product later will amount to the same thing.
     num_latents, dim = all_hidden.shape
+    all_hidden = all_hidden / dim ** 0.25
+
+    # Train index
     mean = torch.mean(all_hidden, dim=0)
     std = torch.std(all_hidden, dim=0)
     print(f"Latent summary statistics: Dim={dim}, mean={mean}, std={std}")
