@@ -10,3 +10,4 @@ git+https://github.com/ricardorei/evaluate.git@update-comet#egg-evaluate
 dill
 einops
 torch
+matplotlib

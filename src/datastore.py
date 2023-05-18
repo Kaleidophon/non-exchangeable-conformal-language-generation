@@ -85,7 +85,7 @@ class DataStore:
 
         # Init index
         if use_quantization:
-            quantizer = faiss.IndexFlatIP(self.key_dim)
+            quantizer = faiss.IndexFlatL2(self.key_dim)
             self.index = faiss.IndexIVFPQ(quantizer, self.key_dim, self.num_centroids, self.code_size, 8)
             self.index.nprobe = num_probes
 
@@ -171,6 +171,11 @@ class DataStore:
         distances, indices = self.index.search(
             query, k
         )  # D, I will have shape (num_queries, k), containing the distance and the index
+
+        # TODO: Debug
+        import time
+        print(distances, indices)
+        time.sleep(2)
 
         distances, indices = torch.FloatTensor(distances), torch.LongTensor(indices)
 

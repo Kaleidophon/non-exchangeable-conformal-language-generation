@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-probes",
         type=int,
-        default=32
+        default=2048
     )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--model-dir", type=str, default=MODEL_DIR)
