@@ -262,9 +262,16 @@ def build_calibration_data(
         conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
 
     # Train index
+    dim = all_hidden.shape[-1]
+    mean = torch.mean(all_hidden, dim=0)
+    std = torch.std(all_hidden, dim=0)
+    print(f"Latent summary statistics: Dim={dim}, mean={mean}, std={std}")
+
+    print("Training index...")
     calibration_data.train_index(all_hidden)
 
     # Add calibration points
+    print(f"Adding {len(conformity_scores)} data points to the index...")
     calibration_data.add(decoder_states, conformity_scores)
 
     return calibration_data

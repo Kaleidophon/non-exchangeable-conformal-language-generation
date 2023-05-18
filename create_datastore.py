@@ -98,8 +98,11 @@ def create_datastore(
     )
 
     # Save datastore
+    print(f"Saving datastore to {save_dir}...")
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+
+    print("Finished!")
 
     data_store.save(save_dir)
 
