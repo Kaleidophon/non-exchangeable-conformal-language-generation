@@ -172,10 +172,7 @@ class DataStore:
             query, k
         )  # D, I will have shape (num_queries, k), containing the distance and the index
 
-        # TODO: Debug
-        import time
-        print(distances, indices)
-        time.sleep(0.5)
+        print(distances, indices)  # TODO: Debug
 
         distances, indices = torch.FloatTensor(distances), torch.LongTensor(indices)
 
