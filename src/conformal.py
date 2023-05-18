@@ -219,7 +219,7 @@ class ConformalCalibrator:
         offset_values += 5e-3  # Add small value so that we include the minimum value as well
         # (The value has a strange value to accommodate errors caused floating point precision)
         q_hat[torch.isinf(q_hat)] = 0  # Remove infinity values, these will be replaced by > 1, so functionally the same
-        q_hat += offset_values.repeat(q_hat.shape[0], 1)
+        q_hat += offset_values.repeat(1, q_hat.shape[1])
 
         # Compute set sizes
         set_sizes = torch.sum((cum_probs < q_hat).long(), -1).cpu().numpy()
