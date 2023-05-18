@@ -184,10 +184,10 @@ class DataStore:
         if found_mask.long().sum() == 0:
             raise ValueError("No matching keys found in the index.")
 
-        distances = distances[found_mask]
+        distances = distances[found_mask].unsqueeze(0)
         indices = indices[found_mask]
 
-        values = self.value_tensor[indices, :]  # (num_queries, k)
+        values = self.value_tensor[indices, :].squeeze(-1).unsqueeze(0)  # (num_queries, k)
 
         return distances.to(self.device), values.to(self.device)
 

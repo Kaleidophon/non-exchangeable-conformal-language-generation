@@ -270,7 +270,7 @@ if __name__ == "__main__":
         choices=tuple(DATASETS.keys())
     )
     parser.add_argument(
-        "--batch_size",
+        "--batch-size",
         type=int,
         default=BATCH_SIZE
     )
