@@ -6,6 +6,7 @@ Implementation of the datastore using FAISS. This implementation is heavily base
 # STD
 import os
 from typing import Tuple
+import warnings
 
 # EXT
 from einops import rearrange
@@ -175,13 +176,16 @@ class DataStore:
             query, k
         )  # D, I will have shape (num_queries, k), containing the distance and the index
 
-        print(distances, indices)  # TODO: Debug
-
         distances, indices = torch.FloatTensor(distances), torch.LongTensor(indices)
 
         found_mask = indices != -1
 
-        if found_mask.long().sum() == 0:
+        found_keys = found_mask.long().sum()
+
+        if found_keys < k:
+            warnings.warn(f"Fewer keys were found than requested ({found_keys} < {k}). Something might be going wrong.")
+
+        elif found_keys == 0:
             raise ValueError("No matching keys found in the index.")
 
         distances = distances[found_mask].unsqueeze(0)
