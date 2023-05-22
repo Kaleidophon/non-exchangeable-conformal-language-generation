@@ -228,12 +228,12 @@ def run_experiments(
             all_q_hats += list(q_hat.cpu().numpy())
 
         # Save results
-        coverage = sum(coverage) / len(coverage)
-
-        print(f"Coverage: {coverage:.4f}")
+        coverage_percentage = sum(coverage) / len(coverage)
+        print(f"Coverage: {coverage_percentage:.4f}")
 
         results = {
             "coverage": coverage,
+            "coverage_percentage": coverage_percentage,
             "avg_distances": avg_distances,
             "avg_weights": avg_weights,
             "avg_conformity_scores": avg_conformity_scores,
