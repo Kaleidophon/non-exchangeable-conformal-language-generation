@@ -14,7 +14,6 @@ from codecarbon import OfflineEmissionsTracker
 import dill
 from einops import rearrange
 from knockknock import telegram_sender
-import numpy as np
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -230,6 +229,7 @@ def run_experiments(
 
         # Save results
         flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
+        import numpy as np
         coverage_percentage = np.mean(flattened_coverage)
         print(f"Coverage: {coverage_percentage:.4f}")
 
