@@ -4,6 +4,8 @@ Plot the results of the coverage experiments.
 
 # STD
 import argparse
+from functools import reduce
+from operator import add
 import re
 from typing import List, Iterable, Dict, Optional
 
@@ -73,8 +75,11 @@ def plot_coverage_results(
             }
 
             for key in set_sizes:
+                flattened_set_sizes = list(reduce(add, set_sizes[key]))  # Flatten
+                flattened_data = list(reduce(add, data[key]))  # Flatten
+
                 expected_coverage_gap = plot_conditional_converage(
-                    data[key], set_sizes[key],
+                    flattened_data, flattened_set_sizes,
                     x_label="Set Size", y_label="Coverage", img_path=f"{save_path}/conditional_coverage_{key}.pdf"
                 )
 

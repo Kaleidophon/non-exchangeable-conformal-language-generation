@@ -214,7 +214,7 @@ def run_experiments(
             )
             q_hat = conformal_results["q_hat"]
             prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
-            all_set_sizes += list(set_sizes)
+            all_set_sizes.append(list(set_sizes))
 
             # Evaluate
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
