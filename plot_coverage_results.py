@@ -73,10 +73,12 @@ def plot_coverage_results(
             }
 
             for key in set_sizes:
-                plot_conditional_converage(
+                expected_coverage_gap = plot_conditional_converage(
                     data[key], set_sizes[key],
                     x_label="Set Size", y_label="Coverage", img_path=f"{save_path}/conditional_coverage_{key}.pdf"
                 )
+
+                print(f"{key}: Expected coverage gap: {expected_coverage_gap}")
             continue
 
         # Replace infs for quantiles
@@ -132,7 +134,7 @@ def plot_bar_chart(data, x_label, y_label, img_path=None):
         plt.show()
 
 
-def plot_conditional_converage(coverage, set_sizes, x_label, y_label, num_bins=75, max_set_size: Optional[int] = None, img_path=None):
+def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.1, num_bins=75, max_set_size: Optional[int] = None, img_path=None):
     fig = plt.figure(figsize=(8, 6))
     ax1 = plt.gca()
     ax2 = ax1.twinx()
@@ -183,6 +185,14 @@ def plot_conditional_converage(coverage, set_sizes, x_label, y_label, num_bins=7
 
     else:
         plt.show()
+
+    # Compute expected coverage gap
+    num_points = sum(bin_sizes)
+    bin_coverages = np.array(bin_coverages)
+    bin_coverages[np.isnan(bin_coverages)] = 0
+    expected_coverage_gap = np.sum(bin_sizes / num_points * np.abs(1 - alpha - np.array(bin_coverages)))
+
+    return expected_coverage_gap
 
 
 if __name__ == "__main__":

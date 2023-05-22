@@ -14,6 +14,7 @@ from codecarbon import OfflineEmissionsTracker
 import dill
 from einops import rearrange
 from knockknock import telegram_sender
+import numpy as np
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -42,7 +43,7 @@ DATASETS = {
 # DEFAULTS
 SEED = 1234
 BATCH_SIZE = 4
-ALPHA = 0.9
+ALPHA = 0.1
 TEMPERATURE = 1
 NUM_NEIGHBORS = 100
 
@@ -218,7 +219,7 @@ def run_experiments(
             # Evaluate
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
             is_covered = list((label_probs > 0).float().cpu().numpy())
-            coverage += is_covered
+            coverage.append(is_covered)
 
             # Add results for this batch
             avg_distances += list(distances.mean(dim=-1).cpu().numpy())
@@ -228,7 +229,8 @@ def run_experiments(
             all_q_hats += list(q_hat.cpu().numpy())
 
         # Save results
-        coverage_percentage = sum(coverage) / len(coverage)
+        flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
+        coverage_percentage = np.mean(flattened_coverage)
         print(f"Coverage: {coverage_percentage:.4f}")
 
         results = {
