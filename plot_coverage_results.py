@@ -63,8 +63,20 @@ def plot_coverage_results(
         # Extract data
         data = {key: value[plot_result] for key, value in results.items()}
 
-        if plot_result == "coverage":
+        if plot_result == "coverage_percentage":
             plot_bar_chart(data, x_label=plot_by, y_label="Coverage", img_path=f"{save_path}/coverage.pdf")
+            continue
+
+        elif plot_result == "coverage":
+            set_sizes = {
+                key: value["all_set_sizes"] for key, value in results.items()
+            }
+
+            for key in set_sizes:
+                plot_conditional_converage(
+                    data[key], set_sizes[key],
+                    x_label="Set Size", y_label="Coverage", img_path=f"{save_path}/conditional_coverage_{key}.pdf"
+                )
             continue
 
         # Replace infs for quantiles
@@ -77,7 +89,7 @@ def plot_coverage_results(
         )
 
 
-def plot_histogram(data: Dict[str, List[int]], xlabel: str, num_bins: int = 20, img_path: Optional[str] = None):
+def plot_histogram(data: Dict[str, List[int]], xlabel: str, num_bins: int = 75, img_path: Optional[str] = None):
     fig = plt.figure(figsize=(8, 6))
     ax = plt.gca()
     ax.grid(axis="both", which="major", linestyle=":", color="grey")
@@ -111,6 +123,59 @@ def plot_bar_chart(data, x_label, y_label, img_path=None):
     ax.set_xticklabels(list(data.keys()))
     plt.xlabel(x_label)
     plt.ylabel(y_label)
+    plt.tight_layout()
+
+    if img_path is not None:
+        plt.savefig(img_path, dpi=300)
+
+    else:
+        plt.show()
+
+
+def plot_conditional_converage(coverage, set_sizes, x_label, y_label, num_bins=75, max_set_size: Optional[int] = None, img_path=None):
+    fig = plt.figure(figsize=(8, 6))
+    ax1 = plt.gca()
+    ax2 = ax1.twinx()
+    ax1.grid(axis="both", which="major", linestyle=":", color="grey")
+
+    if max_set_size is None:
+        max_set_size = max(set_sizes)
+
+    step = max_set_size / num_bins
+    bins = np.arange(1, max_set_size + step, step)
+
+    max_bin_size = 0
+    ax2.set_ylim(0, 5000)  # TODO: Set automatically
+
+    bin_indices = np.digitize(set_sizes, bins, right=True)
+
+    # Plot coverage per bin
+    bin_coverages = [
+        np.mean(np.array(coverage)[bin_indices == i]) for i in range(1, len(bins))
+    ]
+    ax1.plot(
+        bins[1:], bin_coverages,
+        label="Conditional Coverage", linestyle="--", marker="o", alpha=0.6, markersize=5, linewidth=2
+    )
+
+    # Plot number of points ber bin
+    bin_sizes = [
+        np.sum((bin_indices == i).astype(int)) for i in range(1, len(bins))
+    ]
+    ax2.bar(
+        bins[1:], bin_sizes,
+        alpha=0.35, label="Number of Points", width=1200, align='center', color="indianred"
+    )
+
+    if max(bin_sizes) > max_bin_size:
+        max_bin_size = max(bin_sizes)
+
+
+    # Set max bin size for secondary y axis
+
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel("Coverage")
+    ax2.set_ylabel("Number of Points")
     plt.tight_layout()
 
     if img_path is not None:
