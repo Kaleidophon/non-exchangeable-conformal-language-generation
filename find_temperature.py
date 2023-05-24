@@ -140,7 +140,7 @@ def find_temperature(
     best_coverage = np.inf
     min_error = np.inf
 
-    temperature = np.random.uniform(*search_space, size=1)[0]
+    temperature = float(np.random.uniform(*search_space, size=1)[0])
 
     for attempt in range(num_attempts):
 
@@ -226,7 +226,10 @@ def find_temperature(
             best_coverage = coverage
             best_temperature = temperature
 
-        temperature = temperature + 0.1 * np.random.randn(1) * (max_temp - min_temp)
+        elif error == min_error and temperature < best_temperature:
+            best_temperature = temperature
+
+        temperature = temperature + STEP_SIZE * float(np.sign(error) * np.random.randn() * (max_temp - min_temp))
 
     print(f"Best temperature after {num_attempts}: {best_temperature:.4f} with coverage {best_coverage:.4f}")
 
