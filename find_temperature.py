@@ -144,13 +144,14 @@ def find_temperature(
 
     for attempt in range(num_attempts):
 
-        # Init conformal calibrator
-        calibrator = ConformalCalibrator(
-            data_store,
-            alpha=alpha, temperature=temperature, device=device
-        )
-
         with torch.no_grad():
+
+            # Init conformal calibrator
+            calibrator = ConformalCalibrator(
+                data_store,
+                alpha=alpha, temperature=temperature, device=device
+            )
+
             coverage = []
 
             for i, batch in tqdm(enumerate(data_loader), total=num_batches):
