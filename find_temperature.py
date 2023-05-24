@@ -153,7 +153,7 @@ def find_temperature(
             for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
 
                 # TODO: Fast debug
-                if i > 5:
+                if i > 10:
                     break
 
                 # Get input and target
@@ -215,7 +215,6 @@ def find_temperature(
         # Compute coverage and adjust temperature
         coverage = np.mean(coverage)
         error = 1 - alpha - coverage
-        abs_error = np.abs(error)
 
         print(f"Attempt: {attempt+1} | Temperature: {temperature:.4f}, Coverage: {coverage:.4f}, Error: {error:.4f}")
 
@@ -226,11 +225,11 @@ def find_temperature(
 
         # Coverage is too small, decrease temperature
         if error > 0:
-            max_temp = temperature
+            min_temp = temperature
 
         # Coverage is too large, increase temperature
         else:
-            min_temp = temperature
+            max_temp = temperature
 
     print(f"Best temperature after {num_attempts}: {best_temperature:.4f} with coverage {best_coverage:.4f}")
 
