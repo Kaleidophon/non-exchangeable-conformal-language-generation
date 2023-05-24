@@ -185,6 +185,9 @@ def find_temperature(
                 predictions = predictions[mask]
                 labels = labels[mask]
 
+                # Run the non-exchangeable conformal prediction
+                distances, conformity_scores = [], []
+
                 # This can be hard on memory so we do it in batches
                 bbatch_size = 1  # TODO: Debug batch_size
                 for i in range(0, len(decoder_states), bbatch_size):
