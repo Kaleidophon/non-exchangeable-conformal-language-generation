@@ -84,6 +84,7 @@ def plot_coverage_results(
                 )
 
                 print(f"{key}: Expected coverage gap: {expected_coverage_gap}")
+
             continue
 
         # Replace infs for quantiles
@@ -94,6 +95,11 @@ def plot_coverage_results(
         plot_histogram(
             data, xlabel=LABEL_MAPPING[plot_result], img_path=f"{save_path}/{plot_result}.pdf"
         )
+
+    # Plot coverage and set sizes over time
+    for key in results:
+        plot_set_sizes_over_time(results[key]["all_set_sizes"], img_path=f"{save_path}/sizes_over_time_{key}.pdf")
+        plot_coverages_over_time(results[key]["coverage"], img_path=f"{save_path}/coverages_over_time_{key}.pdf")
 
 
 def plot_histogram(data: Dict[str, List[int]], xlabel: str, num_bins: int = 75, img_path: Optional[str] = None):
@@ -152,7 +158,6 @@ def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.
     bins = np.arange(1, max_set_size + step, step)
 
     max_bin_size = 0
-    ax2.set_ylim(0, 5000)  # TODO: Set automatically
 
     bin_indices = np.digitize(set_sizes, bins, right=True)
 
@@ -177,6 +182,7 @@ def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.
     if max(bin_sizes) > max_bin_size:
         max_bin_size = max(bin_sizes)
 
+    ax2.set_ylim(0, max_bin_size * 1.1)  # TODO: Set automatically
 
     # Set max bin size for secondary y axis
 
@@ -198,6 +204,75 @@ def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.
     expected_coverage_gap = np.sum(bin_sizes / num_points * np.abs(1 - alpha - np.array(bin_coverages)))
 
     return expected_coverage_gap
+
+
+def plot_set_sizes_over_time(set_sizes, img_path: Optional[str] = None, cutoff: int = 200):
+
+    max_time_step = max([len(s) for s in set_sizes])
+
+    x = np.arange(1, max_time_step + 1)
+
+    # Put data into a nicer format
+    set_sizes_matrix = np.zeros((len(set_sizes), max_time_step))
+
+    for i, s in enumerate(set_sizes):
+        set_sizes_matrix[i, :len(s)] = s
+
+    fig = plt.figure(figsize=(8, 6))
+    ax1 = plt.gca()
+    ax1.grid(axis="both", which="major", linestyle=":", color="grey")
+
+    non_zero_entries = np.sum((set_sizes_matrix != 0).astype(int), axis=0)
+    means = np.sum(set_sizes_matrix, axis=0) / non_zero_entries
+    std_devs = np.sqrt(np.sum((set_sizes_matrix - means[None, :])**2, axis=0) / non_zero_entries)
+
+    # Apply cut-off
+    means = means[:cutoff]
+    std_devs = std_devs[:cutoff]
+    x = x[:cutoff]
+
+    ax1.plot(x, means, label="Mean Set Size", linestyle="-", alpha=0.5, linewidth=2)
+    ax1.fill_between(x, np.max(means - std_devs, 0), means + std_devs, alpha=0.15, color="blue")
+
+    if img_path is not None:
+        plt.savefig(img_path, dpi=300)
+
+    else:
+        plt.show()
+
+
+def plot_coverages_over_time(coverage, img_path: Optional[str] = None, cutoff: int = 200):
+
+    max_time_step = max([len(s) for s in coverage])
+
+    x = np.arange(1, max_time_step + 1)
+
+    # Put data into a nicer format
+    coverage_matrix = np.zeros((len(coverage), max_time_step)) - 1
+
+    for i, s in enumerate(coverage):
+        coverage_matrix[i, :len(s)] = s
+
+    fig = plt.figure(figsize=(8, 6))
+    ax1 = plt.gca()
+    ax1.grid(axis="both", which="major", linestyle=":", color="grey")
+
+    non_negative_entries = np.sum((coverage_matrix != -1).astype(int), axis=0)
+    coverage_matrix[coverage_matrix == -1] = 0
+    means = np.sum(coverage_matrix, axis=0) / non_negative_entries
+
+    # Apply cut-off
+    means = means[:cutoff]
+    x = x[:cutoff]
+
+    ax1.plot(x, means, label="Mean Coverage", linestyle="-", alpha=0.5, linewidth=2)
+    #ax1.fill_between(x, np.max(means - std_devs, 0), means + std_devs, alpha=0.15, color="blue")
+
+    if img_path is not None:
+        plt.savefig(img_path, dpi=300)
+
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
