@@ -217,7 +217,7 @@ def find_temperature(
         error = 1 - alpha - coverage
         abs_error = np.abs(error)
 
-        print(f"Attempt: {i+1} | Temperature: {temperature:.4f}, Coverage: {coverage:.4f}, Error: {error:.4f}")
+        print(f"Attempt: {attempt+1} | Temperature: {temperature:.4f}, Coverage: {coverage:.4f}, Error: {error:.4f}")
 
         if error < min_error:
             min_error = error
@@ -337,6 +337,7 @@ if __name__ == "__main__":
             project_name=PROJECT_NAME,
             country_iso_code=COUNTRY_CODE,
             output_dir=emissions_path,
+            log_level="error"
         )
         tracker.start()
 
