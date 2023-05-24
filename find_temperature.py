@@ -64,7 +64,7 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
 
-def run_experiments(
+def find_temperature(
     model_identifier: str,
     dataset: str,
     batch_size: int,
@@ -79,7 +79,6 @@ def run_experiments(
     use_quantization: bool,
     device: Device,
     data_dir: str,
-    result_dir: str,
     datastore_dir: str,
     ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
 ):
@@ -340,13 +339,14 @@ if __name__ == "__main__":
 
     try:
         # Run experiments
-        run_experiments(
+        find_temperature(
             model_identifier=args.model,
             dataset=args.dataset,
             batch_size=args.batch_size,
             conformity_method=args.conformity_method,
             alpha=args.alpha,
-            temperature=args.temperature,
+            num_attempts=args.num_attempts,
+            search_space=args.search_space,
             num_neighbors=args.num_neighbors,
             use_quantization=args.use_quantization,
             num_centroids=args.num_centroids,
@@ -355,7 +355,6 @@ if __name__ == "__main__":
             datastore_dir=args.datastore_dir,
             device=args.device,
             data_dir=args.data_dir,
-            result_dir=args.result_dir,
         )
 
     except Exception as e:
