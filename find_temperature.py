@@ -44,7 +44,8 @@ ALPHA = 0.1
 TEMPERATURE = 1
 NUM_NEIGHBORS = 100
 NUM_ATTEMPTS = 20
-SEARCH_SPACE = (0.1, 10)
+SEARCH_SPACE = (0.01, 25)
+NUM_BATCHES = 10
 
 
 # GLOBALS
@@ -72,6 +73,7 @@ def find_temperature(
     alpha: float,
     num_attempts: int,
     search_space: Tuple[float, float],
+    num_batches: int,
     num_neighbors: int,
     num_centroids: int,
     code_size: int,
@@ -150,10 +152,9 @@ def find_temperature(
         with torch.no_grad():
             coverage = []
 
-            for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
+            for i, batch in tqdm(enumerate(data_loader), total=num_batches):
 
-                # TODO: Fast debug
-                if i > 10:
+                if i > num_batches - 1:
                     break
 
                 # Get input and target
@@ -263,6 +264,11 @@ if __name__ == "__main__":
         default=SEARCH_SPACE
     )
     parser.add_argument(
+        "--num-batches",
+        type=int,
+        default=NUM_BATCHES
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=BATCH_SIZE
@@ -350,6 +356,7 @@ if __name__ == "__main__":
             alpha=args.alpha,
             num_attempts=args.num_attempts,
             search_space=args.search_space,
+            num_batches=args.num_batches,
             num_neighbors=args.num_neighbors,
             use_quantization=args.use_quantization,
             num_centroids=args.num_centroids,
