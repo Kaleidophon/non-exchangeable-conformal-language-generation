@@ -45,6 +45,7 @@ TEMPERATURE = 1
 NUM_NEIGHBORS = 100
 NUM_ATTEMPTS = 20
 SEARCH_SPACE = (0.01, 25)
+STEP_SIZE = 0.1
 NUM_BATCHES = 10
 
 
@@ -139,9 +140,9 @@ def find_temperature(
     best_coverage = np.inf
     min_error = np.inf
 
-    for attempt in range(num_attempts):
+    temperature = np.random.uniform(*search_space, size=1)[0]
 
-        temperature = (min_temp + max_temp) / 2
+    for attempt in range(num_attempts):
 
         # Init conformal calibrator
         calibrator = ConformalCalibrator(
@@ -224,13 +225,7 @@ def find_temperature(
             best_coverage = coverage
             best_temperature = temperature
 
-        # Coverage is too small, decrease temperature
-        if error > 0:
-            min_temp = temperature
-
-        # Coverage is too large, increase temperature
-        else:
-            max_temp = temperature
+        temperature = temperature + 0.1 * np.random.randn(1) * (max_temp - min_temp)
 
     print(f"Best temperature after {num_attempts}: {best_temperature:.4f} with coverage {best_coverage:.4f}")
 
