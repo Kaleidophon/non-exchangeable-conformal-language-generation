@@ -59,6 +59,7 @@ def create_datastore(
     dataset: str,
     batch_size: int,
     conformity_score: str,
+    distance_type: str,
     num_centroids: int,
     code_size: int,
     num_probes: int,
@@ -90,6 +91,7 @@ def create_datastore(
     # Populate data score
     data_store = build_calibration_data(
         model, data_loaders["dev"], conformity_score,
+        distance_type=distance_type,
         use_quantization=use_quantization,
         num_centroids=num_centroids,
         code_size=code_size,
@@ -123,6 +125,12 @@ if __name__ == "__main__":
         type=str,
         required=True,
         choices=tuple(DATASETS.keys())
+    )
+    parser.add_argument(
+        "--distance-type",
+        type=str,
+        default="inner_product",
+        choices=("inner_product", "l2")
     )
     parser.add_argument(
         "--batch-size",
@@ -182,6 +190,7 @@ if __name__ == "__main__":
             dataset=args.dataset,
             batch_size=BATCH_SIZE,
             conformity_score=args.conformity_score,
+            distance_type=args.distance_type,
             use_quantization=args.use_quantization,
             num_centroids=args.num_centroids,
             code_size=args.code_size,

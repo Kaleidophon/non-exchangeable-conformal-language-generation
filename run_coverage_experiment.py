@@ -68,6 +68,7 @@ def run_experiments(
     dataset: str,
     batch_size: int,
     conformity_method: str,
+    distance_type: str,
     alpha: float,
     temperature: float,
     num_neighbors: int,
@@ -92,8 +93,8 @@ def run_experiments(
         Dataset to be used for the experiments.
     batch_size: int
         Batch size to be used for the experiments.
-    num_beams: int
-        Number of beams to be used for the experiments.
+    distance_type: str
+        Type of distance to be used for the experiments.
     alpha: float
         Pre-defined confidence level for the experiments.
     device: Device
@@ -134,6 +135,7 @@ def run_experiments(
     # Load calibration data
     data_store = DataStore(
         key_dim=model.config.d_model, value_dim=1,
+        distance_type=distance_type,
         num_centroids=num_centroids, code_size=code_size,
         num_probes=num_probes, use_quantization=use_quantization,
         device=device
@@ -188,7 +190,11 @@ def run_experiments(
             mask = torch.all(
                 torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
             ).to(device)
-            decoder_states = decoder_states[mask] / model.config.d_model ** 0.25
+            decoder_states = decoder_states[mask]
+
+            if distance_type == "inner_product":
+                 decoder_states /= model.config.d_model ** 0.25
+
             predictions = predictions[mask]
             labels = labels[mask]
 
@@ -270,6 +276,12 @@ if __name__ == "__main__":
         type=str,
         required=True,
         choices=tuple(DATASETS.keys())
+    )
+    parser.add_argument(
+        "--distance-type",
+        type=str,
+        default="inner_product",
+        choices=("inner_product", "l2")
     )
     parser.add_argument(
         "--batch-size",
@@ -371,6 +383,7 @@ if __name__ == "__main__":
             dataset=args.dataset,
             batch_size=args.batch_size,
             conformity_method=args.conformity_method,
+            distance_type=args.distance_type,
             alpha=args.alpha,
             temperature=args.temperature,
             num_neighbors=args.num_neighbors,

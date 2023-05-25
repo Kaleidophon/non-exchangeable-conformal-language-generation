@@ -61,7 +61,10 @@ class ConformalCalibrator:
     non-exchangeable conformal prediction, were some weights are taken into account when computing the quantile.
     """
 
-    def __init__(self, data_store, alpha: float, temperature: float = 1.0, device: Device = "cpu", **kwargs):
+    def __init__(
+        self, data_store, alpha: float, distance_type: str = "inner_product",
+            temperature: float = 1.0, device: Device = "cpu", **kwargs
+    ):
         """
         Initialize a conformal calibrator.
 
@@ -71,16 +74,21 @@ class ConformalCalibrator:
             DataStore containing the data to be used for the calibration.
         alpha: float
             Pre-specified confidence level.
+        distance_type: str
+            Type of distance measure being used. Either has to be "inner_product" or "l2".
         temperature: float
             Temperature to be used when computing the weights. Large temperatures will lead to more uniform weights.
             Default is 1.0.
         device: Device
             Device the model and datastore live on. Default is "cpu".
         """
+        assert distance_type in ("inner_product", "l2"), "Distance type has to be either 'inner_product' or 'l2'."
+
         self.data_store = data_store
         self.alpha = alpha
         self.temperature = temperature
         self.device = device
+        self.distance_type = distance_type
 
         self.prediction_set_methods = {
             "classic": self.compute_classic_prediction_set,
@@ -102,7 +110,13 @@ class ConformalCalibrator:
         torch.FloatTensor
             (Unnormalized) weights for each retrieved neighbor based on the neighbor's distance.
         """
-        weights = torch.exp(distances / self.temperature)
+        # For the inner product, larger values mean more similar vectors
+        if self.distance_type == "inner_product":
+            weights = torch.exp(distances / self.temperature)
+
+        # Use the same idea, but here we penalize larger distances
+        elif self.distance_type == "l2":
+            weights = torch.exp(-distances / self.temperature)
 
         return weights
 

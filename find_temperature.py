@@ -71,6 +71,7 @@ def find_temperature(
     dataset: str,
     batch_size: int,
     conformity_method: str,
+    distance_type: str,
     alpha: float,
     num_attempts: int,
     search_space: Tuple[float, float],
@@ -129,6 +130,7 @@ def find_temperature(
     # Load calibration data
     data_store = DataStore(
         key_dim=model.config.d_model, value_dim=1,
+        distance_type=distance_type,
         num_centroids=num_centroids, code_size=code_size,
         num_probes=num_probes, use_quantization=use_quantization,
         device=device
@@ -149,7 +151,7 @@ def find_temperature(
             # Init conformal calibrator
             calibrator = ConformalCalibrator(
                 data_store,
-                alpha=alpha, temperature=temperature, device=device
+                alpha=alpha, temperature=temperature, distance_type=distance_type, device=device
             )
 
             coverage = []
@@ -184,7 +186,11 @@ def find_temperature(
                 mask = torch.all(
                     torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
                 ).to(device)
-                decoder_states = decoder_states[mask] / model.config.d_model ** 0.25
+                decoder_states = decoder_states[mask]
+
+                if distance_type == "inner_product":
+                    decoder_states /= model.config.d_model ** 0.25
+
                 predictions = predictions[mask]
                 labels = labels[mask]
 
@@ -250,6 +256,12 @@ if __name__ == "__main__":
         type=str,
         required=True,
         choices=tuple(DATASETS.keys())
+    )
+    parser.add_argument(
+        "--distance-type",
+        type=str,
+        default="inner_product",
+        choices=("inner_product", "l2")
     )
     parser.add_argument(
         "--num-attempts",
@@ -352,6 +364,7 @@ if __name__ == "__main__":
             dataset=args.dataset,
             batch_size=args.batch_size,
             conformity_method=args.conformity_method,
+            distance_type=args.distance_type,
             alpha=args.alpha,
             num_attempts=args.num_attempts,
             search_space=args.search_space,

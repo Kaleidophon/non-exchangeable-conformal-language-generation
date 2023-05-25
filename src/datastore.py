@@ -43,6 +43,7 @@ class DataStore:
         self,
         key_dim: int,
         value_dim: int,
+        distance_type: str = "inner_product",
         num_centroids: int = 2048,
         code_size: int = 64,
         num_probes: int = 32,
@@ -60,6 +61,8 @@ class DataStore:
             Dimensionality of the keys.
         value_dim: int
             Dimensionality of the values.
+        distance_type: str
+            Type of distance measure being used. Either has to be "inner_product" or "l2".
         num_centroids : int
             Number of centroids to use for clustering during the quantization process.
         code_size : int
@@ -73,6 +76,7 @@ class DataStore:
         token_ids_file_name : str
             Name of the file to save the token ids to. Defaults to 'token_ids.pt'.
         """
+        assert distance_type in ("inner_product", "l2"), "Distance type has to be either 'inner_product' or 'l2'."
 
         # Set attributes
         self.index_file_name = index_file_name
@@ -83,15 +87,18 @@ class DataStore:
         self.num_centroids = num_centroids
         self.num_probes = num_probes
         self.code_size = code_size
+        self.distance_type = distance_type
 
         # Init index
-        if use_quantization:
-            quantizer = faiss.IndexFlatIP(self.key_dim)
-            self.index = faiss.IndexIVFPQ(quantizer, self.key_dim, self.num_centroids, self.code_size, 8)
-            self.index.nprobe = num_probes
-
-        else:
+        if distance_type == "inner_product":
             self.index = faiss.IndexFlatIP(self.key_dim)
+
+        elif distance_type == "l2":
+            self.index = faiss.IndexFlatL2(self.key_dim)
+
+        if use_quantization:
+            self.index = faiss.IndexIVFPQ(self.index, self.key_dim, self.num_centroids, self.code_size, 8)
+            self.index.nprobe = num_probes
 
         if self.device != "cpu":
             co = faiss.GpuClonerOptions()
@@ -199,6 +206,7 @@ class DataStore:
 def build_calibration_data(
     model: MBartForConditionalGeneration,
     data_loader: DataLoader,
+    distance_type: str = "inner_product",
     conformity_score: str = "adaptive",
     ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
     device: Device = "cpu",
@@ -211,16 +219,10 @@ def build_calibration_data(
     ----------
     model: MBartForConditionalGeneration
         Model to be used for the experiments.
-    tokenizer: MBart50TokenizerFast
-        Tokenizer to be used for the experiments.
     data_loader: DataLoader
         Data loader to be used for the experiments.
-    num_beams: int
-        Number of beams to be used for the experiments.
-    source_path: str
-        Path to the source file. Used for evaluating translations.
-    references_path: str
-        Path to the references file. Used for evaluating translations.
+    distance_type: str
+        Type of distance measure being used. Either has to be "inner_product" or "l2".
 
     Returns
     -------
@@ -230,7 +232,9 @@ def build_calibration_data(
     assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
                                                        f"'{conformity_score}' found."
 
-    calibration_data = DataStore(key_dim=model.config.d_model, value_dim=1, device=device, **datastore_kwargs)
+    calibration_data = DataStore(
+        key_dim=model.config.d_model, value_dim=1, distance_type=distance_type, device=device, **datastore_kwargs
+    )
     all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16).to(device)
     all_conformity_scores = torch.empty((0, 1), dtype=torch.float16).to(device)
 
@@ -278,7 +282,9 @@ def build_calibration_data(
     # but faiss only implements either L2 or inner product as distances. So instead, we can just scale the latents now
     # by the forth root of the dimensionality, which using the inner product later will amount to the same thing.
     num_latents, dim = all_hidden.shape
-    all_hidden = all_hidden / dim ** 0.25
+
+    if distance_type == "inner_product":
+        all_hidden = all_hidden / dim ** 0.25
 
     # Train index
     mean = torch.mean(all_hidden, dim=0)
