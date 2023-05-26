@@ -251,7 +251,7 @@ def run_experiments(
         }
 
         timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
-        file_name = f"{timestamp}_{dataset}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}.pkl"
+        file_name = f"{timestamp}_{dataset}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}_{distance_type}.pkl"
 
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
