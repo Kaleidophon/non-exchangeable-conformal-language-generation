@@ -90,7 +90,8 @@ def create_datastore(
 
     # Populate data score
     data_store = build_calibration_data(
-        model, data_loaders["dev"], conformity_score,
+        model, data_loaders["dev"],
+        conformity_score=conformity_score,
         distance_type=distance_type,
         use_quantization=use_quantization,
         num_centroids=num_centroids,
