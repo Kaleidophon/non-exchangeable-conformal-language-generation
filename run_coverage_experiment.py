@@ -306,7 +306,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--alpha",
-        type=int,
+        type=float,
         default=ALPHA
     )
     parser.add_argument(
