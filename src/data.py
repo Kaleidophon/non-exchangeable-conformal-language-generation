@@ -2,6 +2,9 @@
 Implement functions concerned with data loading and preprocessing.
 """
 
+# STD
+from typing import Dict
+
 # EXT
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -78,7 +81,7 @@ def load_data(
     data_dir: str,
     load_splits: Tuple[str, ...] = ("train", "dev", "test"),
     **tokenizer_kwargs
-) -> DataLoader:
+) -> Dict[str, DataLoader]:
     """
     Load dataset and tokenize it.
 

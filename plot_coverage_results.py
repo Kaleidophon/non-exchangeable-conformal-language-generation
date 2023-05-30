@@ -47,8 +47,8 @@ def plot_coverage_results(
     for result_file in result_files:
 
         # Parse parameters from file name
-        neighbors, temperature, alpha = re.compile(
-            r".+?/\d{2}-\d{2}-\d{4}_\(\d{2}:\d{2}:\d{2}\)_\w{4}_\w+?_(\d+)_(\d+\.\d+)_(\d\.\d+)\.pkl"
+        neighbors, temperature, alpha, distance = re.compile(
+            r".+?/\d{2}-\d{2}-\d{4}_\(\d{2}:\d{2}:\d{2}\)_\w{4}_\w+?_(\d+)_(\d+\.\d+)_(\d\.\d+)(_.+)?\.pkl"
         ).match(result_file).groups()
 
         key_map = {
@@ -78,12 +78,23 @@ def plot_coverage_results(
                 flattened_set_sizes = list(reduce(add, set_sizes[key]))  # Flatten
                 flattened_data = list(reduce(add, data[key]))  # Flatten
 
-                expected_coverage_gap = plot_conditional_converage(
-                    flattened_data, flattened_set_sizes,
+                expected_coverage_gap = plot_conditional_coverage(
+                    flattened_data, flattened_set_sizes, bin_width=1200.0,
                     x_label="Set Size", y_label="Coverage", img_path=f"{save_path}/conditional_coverage_{key}.pdf"
                 )
 
                 print(f"{key}: Expected coverage gap: {expected_coverage_gap}")
+
+                # Plot zoomed-in version where we focus on the first 100 set sizes
+                filtered_set_sizes, filtered_data = zip(*[
+                    (set_size, coverage) for set_size, coverage in zip(flattened_set_sizes, flattened_data)
+                    if set_size <= 100
+                ])
+
+                plot_conditional_coverage(
+                    list(filtered_data), list(filtered_set_sizes), num_bins=100, bin_width=100 / 180,
+                    x_label="Set Size", y_label="Coverage", img_path=f"{save_path}/zoomed_conditional_coverage_{key}.pdf"
+                )
 
             continue
 
@@ -92,6 +103,9 @@ def plot_coverage_results(
             data = {key: np.where(np.isinf(value), 1.01, value) for key, value in data.items()}
 
         # Plot
+        if plot_result == "all_set_sizes":
+            data = {key: list(reduce(add, value)) for key, value in data.items()}  # Flatten
+
         plot_histogram(
             data, xlabel=LABEL_MAPPING[plot_result], img_path=f"{save_path}/{plot_result}.pdf"
         )
@@ -145,7 +159,10 @@ def plot_bar_chart(data, x_label, y_label, img_path=None):
         plt.show()
 
 
-def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.1, num_bins=75, max_set_size: Optional[int] = None, img_path=None):
+def plot_conditional_coverage(
+    coverage, set_sizes, x_label, y_label, alpha = 0.1, num_bins=75, bin_width: float = 1200.0,
+    max_set_size: Optional[int] = None, img_path=None
+):
     fig = plt.figure(figsize=(8, 6))
     ax1 = plt.gca()
     ax2 = ax1.twinx()
@@ -176,7 +193,7 @@ def plot_conditional_converage(coverage, set_sizes, x_label, y_label, alpha = 0.
     ]
     ax2.bar(
         bins[1:], bin_sizes,
-        alpha=0.35, label="Number of Points", width=1200, align='center', color="indianred"
+        alpha=0.35, label="Number of Points", width=bin_width, align='center', color="indianred"
     )
 
     if max(bin_sizes) > max_bin_size:

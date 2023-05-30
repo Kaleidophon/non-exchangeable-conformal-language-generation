@@ -3,6 +3,7 @@ Module implementing necessary function for evaluating NMT models.
 """
 
 # STD
+import os
 import re
 import subprocess
 from typing import Dict, List, Tuple
@@ -14,9 +15,7 @@ from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 
 def evaluate_model(
-    model: MBartForConditionalGeneration,
-    tokenizer: MBart50TokenizerFast,
-    data_loader: DataLoader,
+    translations: List[str],
     source_file: str,
     reference_file: str,
     metrics: Tuple[str] = ("bleu", "chrf", "comet"),
@@ -26,12 +25,6 @@ def evaluate_model(
 
     Parameters
     ----------
-    model: MBartForConditionalGeneration
-        Model to be evaluated.
-    tokenizer: MBart50TokenizerFast
-        Tokenizer used for the model.
-    data_loader: DataLoader
-        DataLoader for the test set.
     source_file: str
         Path to the source file.
     reference_file:
@@ -51,29 +44,21 @@ def evaluate_model(
     with open(reference_file, "r") as f:
         reference_translations = [line.strip() for line in f.readlines()]
 
-    # Generate translations
-    print("Generate translations...")
-    translations = generate_test_translations(model, tokenizer, data_loader)
-    print(translations)
-
     # Evaluate translations
     result_dict = {}
 
     if "bleu" in metrics:
-        print("Evaluate BLEU...")
         bleu = evaluate.load("sacrebleu")
         bleu_results = bleu.compute(predictions=translations, references=reference_translations)
-        print(bleu_results)
         result_dict["bleu"] = bleu_results["score"]
 
     if "comet" in metrics:
-        # TODO: Comet doesn't actually give scores here for a weird reason
-        comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
-        comet_score = comet_metric.compute(
-            predictions=translations, references=reference_translations, sources=source_sentences
-        )
-        result_dict["comet1"] = comet_score["scores"][0]
-        result_dict["comet2"] = comet_score["scores"][1]
+        #comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
+        #comet_score = comet_metric.compute(
+        #    predictions=translations, references=reference_translations, sources=source_sentences
+        #)
+        comet_result = evaluate_comet(translations=translations, sources=source_sentences, references=reference_translations)
+        result_dict["comet"] = comet_result
 
     if "chrf" in metrics:
         chrf = evaluate.load("chrf")
@@ -122,9 +107,9 @@ def generate_test_translations(
 
 
 def evaluate_comet(
-    translations_path: str,
-    source_path: str,
-    references_path: str,
+    translations: List[str],
+    sources: List[str],
+    references: List[str],
     use_gpu: bool = False
 ) -> float:
     """
@@ -141,8 +126,18 @@ def evaluate_comet(
     use_gpu: bool
         Indicate whether GPU is available for faster eval.
     """
+    # Create temp files
+    with open("translations.tmp", "w") as f:
+        f.write("\n".join(translations))
+
+    with open("sources.tmp", "w") as f:
+        f.write("\n".join(sources))
+
+    with open("references.tmp", "w") as f:
+        f.write("\n".join(references))
+
     # TODO: Keep for now in case we need to use it for CometKiwi
-    comet_command = f"comet-score -s {source_path} -t {translations_path} -r {references_path}"
+    comet_command = f"comet-score -s sources.tmp -t translations.tmp -r references.tmp"
 
     if not use_gpu:
         comet_command += " --gpus 0"
@@ -157,5 +152,10 @@ def evaluate_comet(
     # Catch final score in output
     score = re.search(r"score: (\d+.\d+)", str(output)).group(1)
     score = float(score)
+
+    # Remove temp files
+    os.remove("translations.tmp")
+    os.remove("sources.tmp")
+    os.remove("references.tmp")
 
     return score

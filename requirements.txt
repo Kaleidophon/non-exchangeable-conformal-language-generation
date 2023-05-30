@@ -11,3 +11,4 @@ dill
 einops
 torch
 matplotlib
+unbabel-comet
