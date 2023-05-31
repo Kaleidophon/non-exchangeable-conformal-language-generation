@@ -82,7 +82,8 @@ class ConformalCalibrator:
         device: Device
             Device the model and datastore live on. Default is "cpu".
         """
-        assert distance_type in ("inner_product", "l2"), "Distance type has to be either 'inner_product' or 'l2'."
+        assert distance_type in ("inner_product", "l2", "cosine"), \
+            "Distance type has to be either 'inner_product', 'cosine' or 'l2'."
 
         self.data_store = data_store
         self.alpha = alpha
