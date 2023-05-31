@@ -131,7 +131,7 @@ if __name__ == "__main__":
         "--distance-type",
         type=str,
         default="inner_product",
-        choices=("inner_product", "l2")
+        choices=("inner_product", "l2", "cosine")
     )
     parser.add_argument(
         "--batch-size",

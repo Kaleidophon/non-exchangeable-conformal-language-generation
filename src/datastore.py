@@ -90,7 +90,7 @@ class DataStore:
         self.distance_type = distance_type
 
         # Init index
-        if distance_type == "inner_product":
+        if distance_type in ("inner_product", "cosine"):
             self.index = faiss.IndexFlatIP(self.key_dim)
 
         elif distance_type == "l2":
@@ -285,6 +285,11 @@ def build_calibration_data(
 
     if distance_type == "inner_product":
         all_hidden = all_hidden / dim ** 0.25
+
+    # To search by cosine distance, we just use inner product search and normalize vectors beforehand
+    # https://github.com/facebookresearch/faiss/wiki/MetricType-and-distances#how-can-i-index-vectors-for-cosine-similarity
+    elif distance_type == "cosine":
+        all_hidden = F.normalize(all_hidden, dim=-1)
 
     # Train index
     mean = torch.mean(all_hidden, dim=0)

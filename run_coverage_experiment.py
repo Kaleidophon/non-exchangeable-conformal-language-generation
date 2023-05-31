@@ -195,6 +195,9 @@ def run_experiments(
             if distance_type == "inner_product":
                  decoder_states /= model.config.d_model ** 0.25
 
+            elif distance_type == "cosine":
+                decoder_states = F.normalize(decoder_states, p=2, dim=-1)
+
             predictions = predictions[mask]
             labels = labels[mask]
 
