@@ -13,26 +13,20 @@ In this case, we test the following methods:
 import argparse
 from datetime import datetime
 import json
-import math
 import os
-from typing import Optional, Dict, Tuple
+from typing import Optional, Tuple
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
-import dill
-from einops import rearrange
-from knockknock import telegram_sender
 import torch
-import torch.nn.functional as F
-from tqdm import tqdm
 from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
-import wandb
+from transformers.generation import SampleEncoderDecoderOutput
 
 # PROJECT
 from src.data import load_data, SUFFIX
-from src.conformal import ConformalCalibrator, ConformalLogitProcessor
-from src.custom_types import Device, WandBRun
+from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
+from src.custom_types import Device
 from src.datastore import DataStore
 from src.evaluation import evaluate_model
 
@@ -99,6 +93,7 @@ def evaluate_generations(
     data_store: Optional[DataStore] = None,
     distance_type: Optional[str] = None,
     conformity_score: Optional[str] = None,
+    num_neighbors: Optional[int] = None,
     # Other arguments
     seed: int = SEED,
     device: Device = "cpu",
@@ -151,13 +146,20 @@ def evaluate_generations(
         assert alpha is not None, "alpha must be specified for conformal sampling methods"
 
         calibrator = ConformalCalibrator(
-            data_store,
             alpha=alpha, temperature=temperature, device=device
         )
 
         # Init conformal calibrator
         if generation_method == "non_exchangeable_nucleus_sampling":
-            ...  # TODO: Implement
+            generation_config["output_hidden_states"] = True
+            generation_config["return_dict_in_generate"] = True
+
+            logit_processor = NonExchangeableConformalLogitProcessor(
+                data_store=data_store, conformity_score=conformity_score,
+                calibrator=calibrator, distance_type=distance_type,
+                num_neighbors=num_neighbors
+            )
+            model = logit_processor.patch_model(model)
 
         # For the conformal nucleus sampling, just compute one global quantile
         elif generation_method == "conformal_nucleus_sampling":
@@ -170,8 +172,7 @@ def evaluate_generations(
             q_hat = q_hat.repeat(batch_size)
             logit_processor = ConformalLogitProcessor(q_hat, conformity_score, calibrator)
 
-            #generation_config["renormalize_logits"] = True
-            generation_config["logits_processor"] = [logit_processor]
+        generation_config["logits_processor"] = [logit_processor]
 
     # Generate translations according to specified method
     translations = []
@@ -183,11 +184,12 @@ def evaluate_generations(
             **generation_config
         )
 
+        # For the non-exchangeable conformal sampling
+        if isinstance(outputs, SampleEncoderDecoderOutput):
+            outputs = outputs.sequences
+
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         translations += outputs
-
-        # TODO: Debug
-        break
 
     # Generate results
     src_abbr = src_lang[:2]
@@ -302,6 +304,11 @@ if __name__ == "__main__":
         type=int,
         default=2048
     )
+    parser.add_argument(
+        "--num-neighbors",
+        type=int,
+        default=NUM_NEIGHBORS
+    )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--result-dir", type=str, default=RESULT_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
@@ -351,6 +358,7 @@ if __name__ == "__main__":
             top_k=args.top_k,
             top_p=args.top_k,
             alpha=args.alpha,
+            num_neighbors=args.num_neighbors,
             data_store=data_store,
             distance_type=args.distance_type,
             conformity_score=args.conformity_score,

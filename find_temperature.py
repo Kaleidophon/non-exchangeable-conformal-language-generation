@@ -150,7 +150,6 @@ def find_temperature(
 
             # Init conformal calibrator
             calibrator = ConformalCalibrator(
-                data_store,
                 alpha=alpha, temperature=temperature, distance_type=distance_type, device=device
             )
 

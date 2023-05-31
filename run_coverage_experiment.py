@@ -144,7 +144,6 @@ def run_experiments(
 
     # Init conformal calibrator
     calibrator = ConformalCalibrator(
-        data_store,
         alpha=alpha, temperature=temperature, device=device
     )
 

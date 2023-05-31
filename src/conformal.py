@@ -4,11 +4,15 @@ Define the core functions for conformal risk control in NLG.
 
 # STD
 from collections import namedtuple
+from functools import wraps
+import types
 from typing import Tuple
 
 # EXT
+from transformers import PreTrainedModel
 from transformers.generation import LogitsProcessor
 import torch
+import torch.nn.functional as F
 
 # PROJECT
 from src.custom_types import Device
@@ -62,7 +66,7 @@ class ConformalCalibrator:
     """
 
     def __init__(
-        self, data_store, alpha: float, distance_type: str = "inner_product",
+        self, alpha: float, distance_type: str = "inner_product",
             temperature: float = 1.0, device: Device = "cpu", **kwargs
     ):
         """
@@ -72,8 +76,6 @@ class ConformalCalibrator:
         ----------
         data_store: DataStore
             DataStore containing the data to be used for the calibration.
-        alpha: float
-            Pre-specified confidence level.
         distance_type: str
             Type of distance measure being used. Either has to be "inner_product" or "l2".
         temperature: float
@@ -85,7 +87,6 @@ class ConformalCalibrator:
         assert distance_type in ("inner_product", "l2", "cosine"), \
             "Distance type has to be either 'inner_product', 'cosine' or 'l2'."
 
-        self.data_store = data_store
         self.alpha = alpha
         self.temperature = temperature
         self.device = device
@@ -266,7 +267,78 @@ class ConformalLogitProcessor(LogitsProcessor):
         if cur_len > 1:
             scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, self.q_hat)[0]
 
-            # Put pack into log space
+            # Put back into log space
+            scores = torch.log(scores + 1e-12)
+
+        return scores
+
+
+class NonExchangeableConformalLogitProcessor(LogitsProcessor):
+    """
+    Warper that uses the non-exchangeable conformal prediction framework to compute prediction sets.
+    """
+    def __init__(
+        self,
+        conformity_score: str,
+        distance_type: str,
+        num_neighbors: int,
+        data_store,
+        calibrator: ConformalCalibrator
+    ):
+        super().__init__()
+        self.distance_type = distance_type
+        self.num_neighbors = num_neighbors
+        self.conformity_score = conformity_score
+        self.data_store = data_store
+        self.calibrator = calibrator
+
+        self.last_decoder_encodings = None
+
+    def patch_model(self, model: PreTrainedModel) -> PreTrainedModel:
+        """
+        Patch the model forward pass to save the decoder hidden encodings.
+        """
+        def hook_fn(model, inputs, outputs):
+            self.last_decoder_encodings = outputs.decoder_hidden_states[-1].squeeze(1)
+
+            if self.distance_type == "inner_product":
+                self.last_decoder_encodings /= model.config.d_model ** 0.25
+
+            elif self.distance_type == "cosine":
+                self.last_decoder_encodings = F.normalize(self.last_decoder_encodings, p=2, dim=-1)
+
+        model.register_forward_hook(hook_fn)
+
+        return model
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+
+        # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor
+        if cur_len > 1:
+            distances = []
+            conformity_scores = []
+
+            for i in range(0, self.last_decoder_encodings.shape[0]):
+
+                batch_distances, batch_conformity_scores = self.data_store.search_k(
+                    self.last_decoder_encodings[i, :].unsqueeze(0), k=self.num_neighbors
+                )
+                distances.append(batch_distances)
+                conformity_scores.append(batch_conformity_scores)
+
+            distances = torch.cat(distances, dim=0)
+            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+
+            weights = self.calibrator.compute_weights(distances)
+            conformal_results = self.calibrator.compute_q_hat(
+                weights, conformity_scores
+            )
+            q_hat = conformal_results["q_hat"]
+            scores = F.softmax(scores, dim=-1)
+            scores, set_size = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hat)
+
+            # Put back into log space
             scores = torch.log(scores + 1e-12)
 
         return scores
