@@ -265,6 +265,7 @@ class ConformalLogitProcessor(LogitsProcessor):
 
         # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor
         if cur_len > 1:
+            scores = F.softmax(scores, dim=-1)
             scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, self.q_hat)[0]
 
             # Put back into log space
