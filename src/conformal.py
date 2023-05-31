@@ -111,7 +111,7 @@ class ConformalCalibrator:
             (Unnormalized) weights for each retrieved neighbor based on the neighbor's distance.
         """
         # For the inner product, larger values mean more similar vectors
-        if self.distance_type == "inner_product":
+        if self.distance_type in ("inner_product", "cosine"):
             weights = torch.exp(distances / self.temperature)
 
         # Use the same idea, but here we penalize larger distances
