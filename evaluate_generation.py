@@ -31,7 +31,7 @@ import wandb
 
 # PROJECT
 from src.data import load_data, SUFFIX
-from src.conformal import ConformalCalibrator
+from src.conformal import ConformalCalibrator, ConformalLogitProcessor
 from src.custom_types import Device, WandBRun
 from src.datastore import DataStore
 from src.evaluation import evaluate_model
@@ -125,13 +125,17 @@ def evaluate_generations(
     generation_config = {
         "max_length": model.config.max_length,
         "early_stopping": True,
-        "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang)
+        "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang),
+        "do_sample": True,
+        "num_beams": 1,
+        "top_k": model.config.vocab_size,
     }
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
         assert num_beams is not None, "num_beams must be specified for beam search"
         generation_config["num_beams"] = num_beams
+        generation_config["do_sample"] = False
 
     elif generation_method == "top_k_sampling":
         assert top_k is not None, "top_k must be specified for top-k sampling"
@@ -146,12 +150,14 @@ def evaluate_generations(
         assert data_store is not None, "Data store must be provided for conformal sampling methods"
         assert alpha is not None, "alpha must be specified for conformal sampling methods"
 
+        calibrator = ConformalCalibrator(
+            data_store,
+            alpha=alpha, temperature=temperature, device=device
+        )
+
         # Init conformal calibrator
         if generation_method == "non_exchangeable_nucleus_sampling":
-            calibrator = ConformalCalibrator(
-                data_store,
-                alpha=alpha, temperature=temperature, device=device
-            )
+            ...  # TODO: Implement
 
         # For the conformal nucleus sampling, just compute one global quantile
         elif generation_method == "conformal_nucleus_sampling":
@@ -160,9 +166,12 @@ def evaluate_generations(
 
             N = len(conformity_scores)
             q_level = np.ceil((N + 1) * (1 - alpha)) / N
-            q_hat = np.quantile(conformity_scores, q_level, method='higher')
+            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')], device=device)
+            q_hat = q_hat.repeat(batch_size)
+            logit_processor = ConformalLogitProcessor(q_hat, conformity_score, calibrator)
 
-        # TODO: Adapt generation procedure to use this methods
+            #generation_config["renormalize_logits"] = True
+            generation_config["logits_processor"] = [logit_processor]
 
     # Generate translations according to specified method
     translations = []
@@ -176,6 +185,9 @@ def evaluate_generations(
 
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         translations += outputs
+
+        # TODO: Debug
+        break
 
     # Generate results
     src_abbr = src_lang[:2]
@@ -211,6 +223,10 @@ if __name__ == "__main__":
         "--model-identifier",
         type=str,
         default=MODEL_IDENTIFIER
+    )
+    parser.add_argument(
+        "--datastore-dir",
+        type=str,
     )
     parser.add_argument(
         "--distance-type",

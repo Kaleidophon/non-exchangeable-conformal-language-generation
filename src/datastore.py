@@ -120,7 +120,7 @@ class DataStore:
         """
         self.index = faiss.read_index(os.path.join(save_dir, self.index_file_name))
         print(f"Loaded index with {self.index.ntotal} entries from disk.")
-        self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name)).to(self.device)
+        self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name), map_location=self.device)
         print(f"Loaded {self.value_tensor.shape[0]} values from disk.")
 
     def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1000000) -> None:
