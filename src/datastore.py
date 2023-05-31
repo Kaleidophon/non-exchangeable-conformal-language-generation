@@ -76,7 +76,8 @@ class DataStore:
         token_ids_file_name : str
             Name of the file to save the token ids to. Defaults to 'token_ids.pt'.
         """
-        assert distance_type in ("inner_product", "l2"), "Distance type has to be either 'inner_product' or 'l2'."
+        assert distance_type in ("inner_product", "l2", "cosine"), \
+            "Distance type has to be either 'inner_product', 'cosine' or 'l2'."
 
         # Set attributes
         self.index_file_name = index_file_name
