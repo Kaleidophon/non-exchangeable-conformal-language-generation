@@ -131,7 +131,7 @@ def evaluate_comet(
     with codecs.open("translations.tmp", "w", "utf-8") as f:
         f.write("\n".join(translations))
 
-    with codecs.sopen("sources.tmp", "w", "utf-8") as f:
+    with codecs.open("sources.tmp", "w", "utf-8") as f:
         f.write("\n".join(sources))
 
     with codecs.open("references.tmp", "w", "utf-8") as f:
