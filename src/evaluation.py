@@ -3,6 +3,7 @@ Module implementing necessary function for evaluating NMT models.
 """
 
 # STD
+import codecs
 import os
 import re
 import subprocess
@@ -37,11 +38,11 @@ def evaluate_model(
     """
 
     # Load source sentences
-    with open(source_file, "r") as f:
+    with codecs.open(source_file, "r", "utf-8") as f:
         source_sentences = [line.strip() for line in f.readlines()]
 
     # Load reference translations
-    with open(reference_file, "r") as f:
+    with codecs.open(reference_file, "r", "utf-8") as f:
         reference_translations = [line.strip() for line in f.readlines()]
 
     # Evaluate translations
@@ -127,13 +128,13 @@ def evaluate_comet(
         Indicate whether GPU is available for faster eval.
     """
     # Create temp files
-    with open("translations.tmp", "w") as f:
+    with codecs.open("translations.tmp", "w", "utf-8") as f:
         f.write("\n".join(translations))
 
-    with open("sources.tmp", "w") as f:
+    with codecs.sopen("sources.tmp", "w", "utf-8") as f:
         f.write("\n".join(sources))
 
-    with open("references.tmp", "w") as f:
+    with codecs.open("references.tmp", "w", "utf-8") as f:
         f.write("\n".join(references))
 
     # TODO: Keep for now in case we need to use it for CometKiwi
