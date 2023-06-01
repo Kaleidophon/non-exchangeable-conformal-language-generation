@@ -124,7 +124,6 @@ def evaluate_generations(
         "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang),
         "do_sample": True,
         "num_beams": 1,
-        "top_k": model.config.vocab_size,
     }
 
     # ### Add custom arguments to geeneration config depending on method being used ###
