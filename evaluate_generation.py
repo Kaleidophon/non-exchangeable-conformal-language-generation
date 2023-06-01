@@ -271,7 +271,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--top-p",
-        type=int,
+        type=float,
         default=TOP_P
     )
     parser.add_argument(
