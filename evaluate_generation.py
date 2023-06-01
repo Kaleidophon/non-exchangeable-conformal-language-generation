@@ -170,7 +170,6 @@ def evaluate_generations(
             N = len(conformity_scores)
             q_level = np.ceil((N + 1) * (1 - alpha)) / N
             q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')]).to(device)
-            q_hat = q_hat.repeat(batch_size)
             logit_processor = ConformalLogitProcessor(q_hat, conformity_score, calibrator)
 
         generation_config["logits_processor"] = [logit_processor]

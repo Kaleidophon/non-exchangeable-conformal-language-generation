@@ -254,7 +254,7 @@ class ConformalLogitProcessor(LogitsProcessor):
     """
     Warper that uses the conformal prediction framework to compute prediction sets.
     """
-    def __init__(self, q_hat: float, conformity_score: str, calibrator: ConformalCalibrator):
+    def __init__(self, q_hat: torch.FloatTensor, conformity_score: str, calibrator: ConformalCalibrator):
         super().__init__()
         self.q_hat = q_hat
         self.conformity_score = conformity_score
@@ -266,7 +266,8 @@ class ConformalLogitProcessor(LogitsProcessor):
         # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor
         if cur_len > 1:
             scores = F.softmax(scores, dim=-1)
-            scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, self.q_hat)[0]
+            q_hat = self.q_hat.repeat(scores.shape[0])  # Adapt to batch size
+            scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hat)[0]
 
             # Put back into log space
             scores = torch.log(scores + 1e-12)
