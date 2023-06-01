@@ -20,6 +20,7 @@ from typing import Optional, Tuple
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
+from tqdm import tqdm
 from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 from transformers.generation import SampleEncoderDecoderOutput
 
@@ -168,7 +169,7 @@ def evaluate_generations(
 
             N = len(conformity_scores)
             q_level = np.ceil((N + 1) * (1 - alpha)) / N
-            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')], device=device)
+            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')]).to(device)
             q_hat = q_hat.repeat(batch_size)
             logit_processor = ConformalLogitProcessor(q_hat, conformity_score, calibrator)
 
@@ -177,7 +178,7 @@ def evaluate_generations(
     # Generate translations according to specified method
     translations = []
 
-    for batch in data_loader:
+    for batch in tqdm(data_loader, total=len(data_loader)):
         outputs = model.generate(
             input_ids=batch["input_ids"],
             attention_mask=batch["attention_mask"],
