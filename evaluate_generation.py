@@ -14,6 +14,7 @@ import argparse
 from datetime import datetime
 import json
 import os
+import types
 from typing import Optional, Tuple
 
 # EXT
@@ -45,7 +46,7 @@ DATASETS = {
 }
 GENERATION_METHODS = (
     "beam_search", "top_k_sampling", "nucleus_sampling", "conformal_nucleus_sampling",
-    "non_exchangeable_nucleus_sampling"
+    "non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"
 )
 
 # DEFAULTS
@@ -149,8 +150,13 @@ def evaluate_generations(
             alpha=alpha, temperature=temperature, device=device
         )
 
-        # Init conformal calibrator
-        if generation_method == "non_exchangeable_nucleus_sampling":
+        # To assess the impact of the weights / neighbor retrieval, also test a variant with constant weights
+        if generation_method == "constant_non_exchangeable_nucleus_sampling":
+            dummy_compute_weights = lambda distances: torch.ones_like(distances)
+            calibrator.compute_weights = types.MethodType(dummy_compute_weights, calibrator)
+
+        # Init logit processor
+        if generation_method in ("non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"):
             generation_config["output_hidden_states"] = True
             generation_config["return_dict_in_generate"] = True
 
