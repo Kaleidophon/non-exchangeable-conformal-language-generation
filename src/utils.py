@@ -6,9 +6,9 @@ Miscellaneous utility functions.
 from typing import List
 
 # EXT
-from accelerate import load_checkpoint_and_dispatch, init_empty_weights
+from accelerate import infer_auto_device_map, init_empty_weights
 from accelerate.utils.modeling import get_max_memory
-from transformers import M2M100ForConditionalGeneration, M2M100Config, AutoModelForPreTraining
+from transformers import M2M100ForConditionalGeneration, M2M100Config, AutoModel
 
 
 def shard_model(
@@ -28,11 +28,13 @@ def shard_model(
     config = M2M100Config.from_pretrained(model_identifier)
 
     with init_empty_weights():
-        model = AutoModelForPreTraining.from_config(config)
+        model = AutoModel.from_config(config)
+
+    device_map = infer_auto_device_map(model, max_memory=max_memory)
 
     model.tie_weights()
-    model = load_checkpoint_and_dispatch(
-        model, model_identifier, device_map="auto", max_memory=max_memory
+    model = M2M100ForConditionalGeneration.from_pretrained(
+        model_identifier, device_map=device_map, max_memory=max_memory
     )
 
     return model
