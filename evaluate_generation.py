@@ -45,7 +45,7 @@ DATASETS = {
     "jaen": ("ja", "en")
 }
 GENERATION_METHODS = (
-    "beam_search", "top_k_sampling", "nucleus_sampling", "conformal_nucleus_sampling",
+    "beam_search", "greedy", "top_k_sampling", "nucleus_sampling", "conformal_nucleus_sampling",
     "non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"
 )
 
@@ -131,6 +131,10 @@ def evaluate_generations(
     if generation_method == "beam_search":
         assert num_beams is not None, "num_beams must be specified for beam search"
         generation_config["num_beams"] = num_beams
+        generation_config["do_sample"] = False
+
+    elif generation_method == "greedy":
+        generation_config["num_beams"] = 1
         generation_config["do_sample"] = False
 
     elif generation_method == "top_k_sampling":

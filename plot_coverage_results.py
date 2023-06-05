@@ -163,7 +163,7 @@ def plot_conditional_coverage(
     coverage, set_sizes, x_label, y_label, alpha = 0.1, num_bins=75, bin_width: float = 1200.0,
     max_set_size: Optional[int] = None, img_path=None
 ):
-    fig = plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(7, 3.5))
     ax1 = plt.gca()
     ax2 = ax1.twinx()
     ax1.grid(axis="both", which="major", linestyle=":", color="grey")
@@ -193,7 +193,7 @@ def plot_conditional_coverage(
     ]
     ax2.bar(
         bins[1:], bin_sizes,
-        alpha=0.35, label="Number of Points", width=bin_width, align='center', color="indianred"
+        alpha=0.45, label="Number of Points", width=bin_width, align='center', color="indianred"
     )
 
     if max(bin_sizes) > max_bin_size:
@@ -203,9 +203,15 @@ def plot_conditional_coverage(
 
     # Set max bin size for secondary y axis
 
-    ax1.set_xlabel(x_label)
-    ax1.set_ylabel("Coverage")
-    ax2.set_ylabel("Number of Points")
+    ax1.set_xlabel(x_label, fontsize=14)
+    ax1.set_ylabel("Coverage", fontsize=14)
+    ax2.set_ylabel("Number of Points", fontsize=14)
+
+    ax1.tick_params(axis='both', which='major', labelsize=12)
+    ax1.tick_params(axis='both', which='minor', labelsize=12)
+    ax2.tick_params(axis='both', which='major', labelsize=12)
+    ax2.tick_params(axis='both', which='minor', labelsize=12)
+
     plt.tight_layout()
 
     if img_path is not None:
