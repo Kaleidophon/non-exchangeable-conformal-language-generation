@@ -31,6 +31,7 @@ from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExcha
 from src.custom_types import Device
 from src.datastore import DataStore
 from src.evaluation import evaluate_model
+from src.utils import shard_model
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -99,6 +100,7 @@ def evaluate_generations(
     # Other arguments
     seed: int = SEED,
     device: Device = "cpu",
+    sharding: Optional[List[Device]] = None
 ):
     # Set seed
     torch.manual_seed(seed)
@@ -108,7 +110,15 @@ def evaluate_generations(
 
     # Load data and model
     src_lang, tgt_lang = DATASETS[dataset]
-    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+
+    # Initialize model
+    if sharding is None:
+        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+
+    # Shard models onto different GPUs
+    else:
+        model = shard_model(model_identifier, sharding).to(device)
+
     model.eval()
     tokenizer = M2M100Tokenizer.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
     data_loader = load_data(
@@ -318,6 +328,12 @@ if __name__ == "__main__":
         type=int,
         default=NUM_NEIGHBORS
     )
+    parser.add_argument(
+        "--sharding",
+        type=str,
+        nargs="+",
+        default=None
+    )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--result-dir", type=str, default=RESULT_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
@@ -373,6 +389,7 @@ if __name__ == "__main__":
             conformity_score=args.conformity_score,
             seed=args.seed,
             device=args.device,
+            sharding=args.sharding
         )
 
     except Exception as e:

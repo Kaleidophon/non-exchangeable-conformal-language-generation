@@ -9,17 +9,16 @@ import os
 from typing import Optional, List
 
 # EXT
-from accelerate import load_checkpoint_and_dispatch, init_empty_weights
-from accelerate.utils.modeling import get_max_memory
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer, M2M100Config
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 
 # PROJECT
 from src.data import load_data
 from src.datastore import CONFORMITY_SCORES, build_calibration_data
 from src.custom_types import Device
+from src.utils import shard_model
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -94,24 +93,7 @@ def create_datastore(
 
     # Shard models onto different GPUs
     else:
-        # Create a max memory map here to restrict the device list to certain devices, but still have HF distribute the
-        # model modules automatically
-        max_memory = get_max_memory()
-        max_memory = {
-            device: max_memory[device]
-            for device in max_memory.keys()
-            if device in sharding or device == "cpu"
-        }
-
-        config = M2M100Config.from_pretrained(model_identifier)
-
-        with init_empty_weights():
-            model = M2M100ForConditionalGeneration.from_config(config)
-
-        model.tie_weights()
-        model = load_checkpoint_and_dispatch(
-            model, model_identifier, device_map="auto", max_memory=max_memory
-        )
+        model = shard_model(model_identifier, sharding).to(device)
 
     model.eval()
 
@@ -233,6 +215,7 @@ if __name__ == "__main__":
             seed=args.seed,
             data_dir=args.data_dir,
             save_dir=args.save_dir,
+            sharding=args.sharding,
         )
 
     except Exception as e:

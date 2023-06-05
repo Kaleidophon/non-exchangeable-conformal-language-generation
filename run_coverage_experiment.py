@@ -7,7 +7,7 @@ import argparse
 from datetime import datetime
 import math
 import os
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
@@ -25,6 +25,7 @@ from src.data import load_data, SUFFIX
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device, WandBRun
 from src.datastore import DataStore
+from src.utils import shard_model
 
 # CONST
 DATA_DIR = "./data/wmt22"
@@ -81,6 +82,7 @@ def run_experiments(
     result_dir: str,
     datastore_dir: str,
     ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    sharding: Optional[List[Device]] = None,
 ):
     """
     Run experiments for conformal risk control in NLG.
@@ -117,8 +119,14 @@ def run_experiments(
     Dict[str, float]
         Dictionary containing the results of the experiments.
     """
-    # Load or init model
-    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+    # Initialize model
+    if sharding is None:
+        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+
+    # Shard models onto different GPUs
+    else:
+        model = shard_model(model_identifier, sharding).to(device)
+
     model.eval()
     tokenizer = M2M100Tokenizer.from_pretrained(model_identifier)
 
@@ -331,6 +339,12 @@ if __name__ == "__main__":
         type=int,
         default=2048
     )
+    parser.add_argument(
+        "--sharding",
+        type=str,
+        nargs="+",
+        default=None
+    )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
     parser.add_argument("--result-dir", type=str, default=RESULT_DIR)
@@ -397,6 +411,7 @@ if __name__ == "__main__":
             device=args.device,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
+            sharding=args.sharding,
         )
 
     except Exception as e:
