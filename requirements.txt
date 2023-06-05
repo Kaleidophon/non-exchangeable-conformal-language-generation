@@ -12,3 +12,4 @@ einops
 torch
 matplotlib
 unbabel-comet
+accelerate
