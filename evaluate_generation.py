@@ -330,7 +330,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--sharding",
-        type=str,
+        type=int,
         nargs="+",
         default=None
     )
