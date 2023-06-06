@@ -13,8 +13,9 @@ from typing import Optional, Tuple
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
-from einops import rearrange
 import numpy as np
+import pandas as pd
+import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -116,12 +117,7 @@ def perform_hallucinations_experiment(
     hallucination_set_sizes = defaultdict(list)
 
     for split in ("dev", "test"):
-        j = 0  # TODO: Debug
         for batch in tqdm(data_loaders[split], total=len(data_loaders[split])):
-            # TODO: Debug
-            j += 1
-            if j > 3:
-                break
 
             generate_outputs = model.generate(
                 input_ids=batch["input_ids"],
@@ -209,15 +205,92 @@ def perform_hallucinations_experiment(
     ate = torch.cat(diffs).mean().item()
     print(f"ATE: {ate:.4f}")
 
-    # Compute Bayes factors
-    # TODO
+    # Fit time step models
+    max_time_step = max([len(s) for s in normal_set_sizes["dev"]])
+    num_seqs = len(normal_set_sizes["dev"])
 
-    ...  # TODO: Implement
-    print(results)
+    # Put data into a nicer format
+    coverage_matrix_normal = np.zeros((num_seqs, max_time_step)) - 1
+    coverage_matrix_hallucinatory = np.zeros((num_seqs, max_time_step)) - 1
+
+    for i in range(num_seqs):
+        coverage_matrix_normal[i, :len(normal_set_sizes["dev"][i])] = normal_set_sizes["dev"][i]
+        coverage_matrix_hallucinatory[i, :len(hallucination_set_sizes["dev"][i])] = hallucination_set_sizes["dev"][i]
+
+    # Get means and variances
+    non_negative_entries_normal = np.sum((coverage_matrix_normal != -1).astype(int), axis=0)
+    coverage_matrix_normal[coverage_matrix_normal == -1] = 0
+    means_normal = np.sum(coverage_matrix_normal, axis=0) / non_negative_entries_normal
+    std_devs_normal = np.sqrt(
+        np.sum((coverage_matrix_normal - means_normal[None, :]) ** 2, axis=0) / non_negative_entries_normal
+    ) / np.sqrt(non_negative_entries_normal)
+
+    non_negative_entries_hallucinatory = np.sum((coverage_matrix_hallucinatory != -1).astype(int), axis=0)
+    coverage_matrix_hallucinatory[coverage_matrix_hallucinatory == -1] = 0
+    means_hallucinatory = np.sum(coverage_matrix_hallucinatory, axis=0) / non_negative_entries_hallucinatory
+    std_devs_hallucinatory = np.sqrt(
+        np.sum((coverage_matrix_hallucinatory - means_hallucinatory[None, :]) ** 2, axis=0)
+        / non_negative_entries_hallucinatory
+    ) / np.sqrt(non_negative_entries_hallucinatory)
+    def score_set_sizes(set_sizes, means, std_devs):
+        return sum([
+            stats.norm.logpdf(set_size.item(), loc=mean, scale=std_dev+ 1e-16)
+            for set_size, mean, std_dev in zip(set_sizes, means, std_devs)
+        ])
+
+    # Compute Bayes factors
+    bayes_factors_normal = [
+        score_set_sizes(set_sizes_normal, means_hallucinatory, std_devs_hallucinatory) -
+        score_set_sizes(set_sizes_normal, means_normal, std_devs_normal)  # Subtract since we are in log space
+        for set_sizes_normal in normal_set_sizes["test"]
+    ]
+
+    bayes_factors_hallucinatory = [
+        score_set_sizes(set_sizes_hallucinatory, means_hallucinatory, std_devs_hallucinatory) -
+        score_set_sizes(set_sizes_hallucinatory, means_normal, std_devs_normal)  # Subtract since we are in log space
+        for set_sizes_hallucinatory in hallucination_set_sizes["test"]
+    ]
+
+    # Put into nice table
+    result_df = pd.DataFrame(
+        columns=["Data", "Avg. Bayes Factor", "Accept H0", "Accept H1", "Undecided", "Type I rate", "Type II rate"]
+    )
+    result_df["Data"] = ["Normal", "Hallucinatory"]
+    result_df.set_index("Data", inplace=True)
+
+    # Compute occurrences and put into table
+    normal_num_h0 = sum([bf <= -3 for bf in bayes_factors_normal])
+    normal_num_h1 = sum([bf >= 3 for bf in bayes_factors_normal])
+    normal_num_undecided = len(bayes_factors_normal) - normal_num_h0 - normal_num_h1
+    normal_type1_rate = normal_num_h0 / len(bayes_factors_normal)  # FP rate - don't accept H0 since no hallucinations
+    normal_type2_rate = normal_num_undecided / len(bayes_factors_normal)  # FN rate - should have accepted H1
+    result_df.loc["Normal", "Avg. Bayes Factor"] = np.mean(bayes_factors_normal)
+    result_df.loc["Normal", "Accept H0"] = normal_num_h0
+    result_df.loc["Normal", "Accept H1"] = normal_num_h1
+    result_df.loc["Normal", "Undecided"] = normal_num_undecided
+    result_df.loc["Normal", "Type I rate"] = normal_type1_rate
+    result_df.loc["Normal", "Type II rate"] = normal_type2_rate
+
+    hallucinatory_num_h0 = sum([bf <= -3 for bf in bayes_factors_hallucinatory])
+    hallucinatory_num_h1 = sum([bf >= 3 for bf in bayes_factors_hallucinatory])
+    hallucinatory_num_undecided = len(bayes_factors_hallucinatory) - hallucinatory_num_h0 - hallucinatory_num_h1
+    # FP rate - don't accept H1 we have hallucinations
+    hallucinatory_type1_rate = hallucinatory_num_h1 / len(bayes_factors_hallucinatory)
+    # FN rate - should have accepted H1
+    hallucinatory_type2_rate = hallucinatory_num_undecided / len(bayes_factors_hallucinatory)
+    result_df.loc["Hallucinatory", "Avg. Bayes Factor"] = np.mean(bayes_factors_hallucinatory)
+    result_df.loc["Hallucinatory", "Accept H0"] = hallucinatory_num_h0
+    result_df.loc["Hallucinatory", "Accept H1"] = hallucinatory_num_h1
+    result_df.loc["Hallucinatory", "Undecided"] = hallucinatory_num_undecided
+    result_df.loc["Hallucinatory", "Type I rate"] = hallucinatory_type1_rate
+    result_df.loc["Hallucinatory", "Type II rate"] = hallucinatory_type2_rate
+
+    print(result_df.to_markdown())
 
     # Save results to path
-    with open(f"{result_dir}/{timestamp}_results.txt", "w") as results_file:
-        results_file.write(json.dumps(results))
+    with open(f"{result_dir}/{timestamp}_hallucinations_results.txt", "w") as results_file:
+        results_file.write(f"ATE: {ate:.4f}\n\n")
+        results_file.write(result_df.to_markdown())
 
 
 if __name__ == "__main__":
