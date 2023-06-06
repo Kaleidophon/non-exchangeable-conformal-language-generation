@@ -15,7 +15,7 @@ from datetime import datetime
 import json
 import os
 import types
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
