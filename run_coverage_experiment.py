@@ -80,7 +80,7 @@ def run_experiments(
     data_dir: str,
     result_dir: str,
     datastore_dir: str,
-    ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    ignore_token_ids: Tuple[int] = (1, 2),
 ):
     """
     Run experiments for conformal risk control in NLG.
