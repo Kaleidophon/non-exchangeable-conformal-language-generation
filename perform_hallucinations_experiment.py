@@ -26,27 +26,22 @@ from src.conformal import ConformalCalibrator, NonExchangeableConformalLogitProc
 from src.custom_types import Device
 from src.data import load_data
 from src.datastore import DataStore
+from src.defaults import (
+    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME,
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR
+)
 
-# CONST
-DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models"
-RESULT_DIR = "./results"
-EMISSION_DIR = "./emissions"
-PROJECT_NAME = "nlg-conformal-risk-control"
-MODEL_IDENTIFIER = "facebook/m2m100_418M"
-# Map available language pairs to language identifiers for tokenizer
-DATASETS = {
-    "deen": ("de", "en"),
-    "jaen": ("ja", "en")
-}
+# GLOBALS
+SECRET_IMPORTED = False
 
-# DEFAULTS
-SEED = 1234
-BATCH_SIZE = 4
-ALPHA = 0.1
-TEMPERATURE = 1
-NUM_NEIGHBORS = 100
-SEQUENCE_LENGTH = 128
+# Knockknock support
+try:
+    from secret import COUNTRY_CODE
+
+    SECRET_IMPORTED = True
+
+except ImportError:
+    pass
 
 
 def perform_hallucinations_experiment(
