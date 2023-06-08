@@ -11,6 +11,7 @@ In this case, we test the following methods:
 
 # STD
 import argparse
+from collections import defaultdict
 from datetime import datetime
 import json
 import os
@@ -66,6 +67,8 @@ def evaluate_generations(
     evaluation_metrics: Tuple[str, ...] = ("bleu", "chrf", "comet"),
     # Arguments for common sampling methods
     num_beams: Optional[int] = None,
+    num_samples: Optional[int] = None,
+    softmax_temperature: Optional[float] = None,
     top_k: Optional[int] = None,
     top_p: Optional[float] = None,
     # Arguments for conformal sampling methods
@@ -106,12 +109,19 @@ def evaluate_generations(
         load_splits=("test",)
     )["test"]
 
+    if softmax_temperature is None:
+        softmax_temperature = 1
+
+    if num_samples is None:
+        num_samples = 1
+
     generation_config = {
         "max_length": model.config.max_length,
         "early_stopping": True,
         "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang),
         "do_sample": True,
         "num_beams": 1,
+        "temperature": softmax_temperature,
     }
 
     # ### Add custom arguments to geeneration config depending on method being used ###
@@ -171,32 +181,54 @@ def evaluate_generations(
         generation_config["logits_processor"] = [logit_processor]
 
     # Generate translations according to specified method
-    translations = []
+    translations = [] * num_samples
 
     for batch in tqdm(data_loader, total=len(data_loader)):
-        outputs = model.generate(
-            input_ids=batch["input_ids"],
-            attention_mask=batch["attention_mask"],
-            **generation_config
-        )
+        for n in range(num_samples):
+            outputs = model.generate(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                **generation_config
+            )
 
-        # For the non-exchangeable conformal sampling
-        if isinstance(outputs, SampleEncoderDecoderOutput):
-            outputs = outputs.sequences
+            # For the non-exchangeable conformal sampling
+            if isinstance(outputs, SampleEncoderDecoderOutput):
+                outputs = outputs.sequences
 
-        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        translations += outputs
+            outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            translations[n] += outputs
 
     # Generate results
     src_abbr = src_lang[:2]
     tgt_abbr = tgt_lang[:2]
     source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
     reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
-    results = evaluate_model(translations, source_file, reference_file, metrics=evaluation_metrics)
+    partial_results = [
+        evaluate_model(translations[n], source_file, reference_file, metrics=evaluation_metrics)
+        for n in range(num_samples)
+    ]
+
+    if num_samples == 1:
+        results = partial_results[0]
+
+    else:
+        results = defaultdict(list)
+
+        for result in partial_results:
+            for key, value in result.items():
+                results[key].append(value)
+
+    # Compute mean and std dev
+    print_results = {
+        f"{key}": f"{np.mean(value):.4f} ± {np.std(value):.4f}"
+        for key, value in results.items()
+    }
+    results.update(print_results)
+
     print(results)
 
     # Save results to path
-    with open(f"{result_dir}/{timestamp}_results.txt", "w") as results_file:
+    with open(f"{result_dir}/{timestamp}_{model_identifier}_{generation_method}_results.txt", "w") as results_file:
         results_file.write(json.dumps(results))
 
 
@@ -254,6 +286,16 @@ if __name__ == "__main__":
         "--num-beams",
         type=int,
         default=NUM_BEAMS
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=1
+    )
+    parser.add_argument(
+        "--softmax-temperature",
+        type=float,
+        default=1.0
     )
     parser.add_argument(
         "--top-k",
@@ -352,6 +394,8 @@ if __name__ == "__main__":
             result_dir=args.result_dir,
             evaluation_metrics=args.evaluation_metrics,
             num_beams=args.num_beams,
+            num_samples=args.num_samples,
+            softmax_temperature=args.softmax_temperature,
             top_k=args.top_k,
             top_p=args.top_k,
             alpha=args.alpha,
