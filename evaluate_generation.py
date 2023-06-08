@@ -181,7 +181,7 @@ def evaluate_generations(
         generation_config["logits_processor"] = [logit_processor]
 
     # Generate translations according to specified method
-    translations = [] * num_samples
+    translations = [[] for _ in range(num_samples)]
 
     for batch in tqdm(data_loader, total=len(data_loader)):
         for n in range(num_samples):
