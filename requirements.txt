@@ -13,3 +13,5 @@ torch
 matplotlib
 unbabel-comet
 accelerate
+apache_beam
+mwparserfromhell

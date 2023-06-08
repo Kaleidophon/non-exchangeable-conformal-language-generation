@@ -5,7 +5,7 @@ Implementation of the datastore using FAISS. This implementation is heavily base
 
 # STD
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 import warnings
 
 # EXT
@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, M2M100PreTrainedModel
 
 # PROJECT
 from src.conformal import simple_conformity_scores, adaptive_conformity_score
@@ -51,6 +51,7 @@ class DataStore:
         device: Device = "cpu",
         index_file_name: str = "index.trained",
         token_ids_file_name: str = "token_ids.pt",
+        entropy_values_file_name: str = "entropy_values.pt",
     ):
         """
         Set the necessary attributes. The number follow the original paper.
@@ -82,6 +83,7 @@ class DataStore:
         # Set attributes
         self.index_file_name = index_file_name
         self.token_ids_file_name = token_ids_file_name
+        self.entropy_values_file_name = entropy_values_file_name
         self.device = device
         self.key_dim = key_dim
         self.value_dim = value_dim
@@ -108,6 +110,7 @@ class DataStore:
             self.index = faiss.index_cpu_to_gpu(resources, 0, self.index, co)
 
         self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16).to(device)
+        self.entropy_tensor = torch.empty((0, 1), dtype=torch.float16).to(device)
 
     def load(self, save_dir: str) -> None:
         """
@@ -122,6 +125,11 @@ class DataStore:
         print(f"Loaded index with {self.index.ntotal} entries from disk.")
         self.value_tensor = torch.load(os.path.join(save_dir, self.token_ids_file_name), map_location=self.device)
         print(f"Loaded {self.value_tensor.shape[0]} values from disk.")
+
+        entropy_value_path = os.path.join(save_dir, self.entropy_values_file_name)
+        if os.path.exists(entropy_value_path):
+            self.entropy_tensor = torch.load(os.path.join(save_dir, self.entropy_values_file_name), map_location=self.device)
+            print(f"Loaded {self.entropy_tensor.shape[0]} values from disk.")
 
     def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1000000) -> None:
         """
@@ -140,7 +148,12 @@ class DataStore:
         if self.device != "cpu":
             self.index = faiss.index_gpu_to_cpu(self.index)  # put back to CPU
 
-    def add(self, keys: torch.FloatTensor, values: torch.FloatTensor) -> None:
+    def add(
+        self,
+        keys: torch.FloatTensor,
+        values: torch.FloatTensor,
+        entropies: Optional[torch.FloatTensor] = None
+    ) -> None:
         """
         Add the keys to the trained index.
         :param keys_to_add: a numpy array of shape (num_keys, keys_dim)
@@ -149,6 +162,9 @@ class DataStore:
         self.index.add(keys.cpu().numpy())  # add vectors to the index
         self.value_tensor = torch.cat(
             [self.value_tensor, values.to(torch.float16)], dim=0
+        )
+        self.entropy_tensor = torch.cat(
+            [self.entropy_tensor, entropies.to(torch.float16)], dim=0
         )
 
     def save(self, output_dir: str) -> None:
@@ -167,6 +183,14 @@ class DataStore:
             # save the index for token_ids
             torch.save(
                 self.value_tensor, os.path.join(output_dir, self.token_ids_file_name)
+            )
+        except Exception as e:
+            raise IOError(f"Encountered error when saving torch tensor to {output_dir}: {e}")
+
+        try:
+            # save the index for token_ids
+            torch.save(
+                self.entropy_tensor, os.path.join(output_dir, self.entropy_values_file_name)
             )
         except Exception as e:
             raise IOError(f"Encountered error when saving torch tensor to {output_dir}: {e}")
@@ -233,10 +257,16 @@ def build_calibration_data(
     assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
                                                        f"'{conformity_score}' found."
 
+    try:
+        model_hidden_size = model.config.d_model
+
+    except:
+        model_hidden_size = int(model.config.hidden_size / 2)
+
     calibration_data = DataStore(
-        key_dim=model.config.d_model, value_dim=1, distance_type=distance_type, device=device, **datastore_kwargs
+        key_dim=model_hidden_size, value_dim=1, distance_type=distance_type, device=device, **datastore_kwargs
     )
-    all_hidden = torch.empty((0, model.config.d_model), dtype=torch.float16).to(device)
+    all_hidden = torch.empty((0, model_hidden_size), dtype=torch.float16).to(device)
     all_conformity_scores = torch.empty((0, 1), dtype=torch.float16).to(device)
 
     model.eval()
@@ -248,26 +278,37 @@ def build_calibration_data(
         attention_mask = batch["attention_mask"].to(model.device)
         decoder_input_ids = batch["decoder_input_ids"].to(model.device)
         labels = batch["labels"].to(model.device)
+        forward_kwargs = {
+            "output_hidden_states": True,
+            "return_dict": True,
+        }
+
+        if isinstance(model, M2M100PreTrainedModel):
+            forward_kwargs["decoder_inputs_ids"] = decoder_input_ids
 
         # Generate hypotheses
         with torch.no_grad():
             outputs = model.forward(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_hidden_states=True,
-                decoder_input_ids=decoder_input_ids,
-                return_dict=True,
+                **forward_kwargs
             )
-        decoder_states = outputs.decoder_hidden_states[-1]
+
+        if isinstance(model, M2M100PreTrainedModel):
+            hidden_states = outputs.decoder_hidden_states[-1]
+
+        else:
+            hidden_states = outputs.hidden_states[-1]
+
         predictions = F.softmax(outputs.logits, dim=-1)
 
         # Reshape and filter out ignore tokens
-        decoder_states = rearrange(decoder_states, "b s h -> (b s) h")
+        hidden_states = rearrange(hidden_states, "b s h -> (b s) h")
         predictions = rearrange(predictions, "b s c -> (b s) c")
         input_ids = rearrange(input_ids, "b s -> (b s)")
         labels = rearrange(labels, "b s -> (b s)")
         mask = torch.all(torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0)
-        decoder_states = decoder_states[mask]
+        hidden_states = hidden_states[mask]
         predictions = predictions[mask]
         labels = labels[mask]
 
@@ -275,7 +316,7 @@ def build_calibration_data(
         conformity_scores = CONFORMITY_SCORES[conformity_score](predictions, labels)
 
         # Add to existing ones
-        all_hidden = torch.cat([all_hidden, decoder_states], dim=0)
+        all_hidden = torch.cat([all_hidden, hidden_states], dim=0)
         all_conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
 
     # Normalize distances by dimensionality to make distance computation easier

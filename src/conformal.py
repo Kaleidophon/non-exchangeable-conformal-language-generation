@@ -7,6 +7,7 @@ from collections import namedtuple
 from typing import Tuple
 
 # EXT
+import numpy as np
 from transformers import PreTrainedModel
 from transformers.generation import LogitsProcessor
 import torch
@@ -252,11 +253,47 @@ class ConformalLogitProcessor(LogitsProcessor):
     """
     Warper that uses the conformal prediction framework to compute prediction sets.
     """
-    def __init__(self, q_hat: torch.FloatTensor, conformity_score: str, calibrator: ConformalCalibrator):
+    def __init__(
+        self,
+        alpha: float,
+        conformity_score: str,
+        data_store,
+        calibrator: ConformalCalibrator,
+        num_bins: int = 10
+    ):
         super().__init__()
-        self.q_hat = q_hat
         self.conformity_score = conformity_score
         self.calibrator = calibrator
+        self.num_bins = num_bins
+
+        # Bin conformity stores by entropy and get the corresponding q_hat
+        conformity_scores = data_store.value_tensor
+        entropy_values = data_store.value_tensor
+        self.bin_boundaries = torch.linspace(torch.min(entropy_values)[0], torch.max(entropy_values)[0], self.num_bins)
+        bins = [[] for _ in range(self.num_bins)]
+
+        for entropy, conformity in zip(entropy_values, conformity_scores):
+            bin_index = torch.searchsorted(self.bin_boundaries, entropy).item() - 1
+            bins[bin_index].append(conformity.item())
+
+        # Compute q_hat for each bin
+        self.q_hats = []
+
+        for bin in bins:
+            N = len(bin)
+            q_level = np.ceil((N + 1) * (1 - alpha)) / N
+            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')])
+            self.q_hats.append(q_hat)
+
+    def get_q_hats(self, scores: torch.FloatTensor):
+        """
+        Get the q_hat corresponding to an entropy bin.
+        """
+        entropy = torch.sum(-torch.log(scores) * scores, dim=-1)
+        bin_indices = torch.searchsorted(self.bin_boundaries, entropy) - 1
+        q_hats = torch.stack([self.q_hats[i] for i in bin_indices])
+
+        return q_hats
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
@@ -264,8 +301,9 @@ class ConformalLogitProcessor(LogitsProcessor):
         # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor
         if cur_len > 1:
             scores = F.softmax(scores, dim=-1)
-            q_hat = self.q_hat.repeat(scores.shape[0])  # Adapt to batch size
-            scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hat)[0]
+
+            q_hats = self.get_q_hats(scores).to(scores.device)
+            scores = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hats)[0]
 
             # Put back into log space
             scores = torch.log(scores + 1e-12)

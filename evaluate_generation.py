@@ -171,13 +171,15 @@ def evaluate_generations(
 
         # For the conformal nucleus sampling, just compute one global quantile
         elif generation_method == "conformal_nucleus_sampling":
-            conformity_scores = data_store.value_tensor.cpu().numpy()
-            del data_store  # Free memory
 
-            N = len(conformity_scores)
-            q_level = np.ceil((N + 1) * (1 - alpha)) / N
-            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')]).to(device)
-            logit_processor = ConformalLogitProcessor(q_hat, conformity_score, calibrator)
+            logit_processor = ConformalLogitProcessor(
+                alpha=alpha,
+                conformity_score=conformity_score,
+                calibrator=calibrator,
+                data_store=data_store,
+            )
+
+            del data_store
 
         generation_config["logits_processor"] = [logit_processor]
 

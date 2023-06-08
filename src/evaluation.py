@@ -52,10 +52,6 @@ def evaluate_model(
         result_dict["bleu"] = bleu_results["score"]
 
     if "comet" in metrics:
-        #comet_metric = evaluate.load('comet', 'Unbabel/wmt20-comet-da')
-        #comet_score = comet_metric.compute(
-        #    predictions=translations, references=reference_translations, sources=source_sentences
-        #)
         comet_result = evaluate_comet(translations=translations, sources=source_sentences, references=reference_translations)
         result_dict["comet"] = comet_result
 

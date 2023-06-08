@@ -17,7 +17,13 @@ MODEL_IDENTIFIER = "facebook/m2m100_418M"
 # Map available language pairs to language identifiers for tokenizer
 DATASETS = {
     "deen": ("de", "en"),
-    "jaen": ("ja", "en")
+    "jaen": ("ja", "en"),
+    "openwebtext": (),
+}
+DATASET_TASKS = {
+    "deen": "mt",
+    "jaen": "mt",
+    "openwebtext": "lm",
 }
 
 # Experimental defaults
@@ -39,8 +45,8 @@ HF_RESOURCES = {
 MODEL_HIDDEN_SIZES = {
     "facebook/m2m100_418M": 1024,
     "facebook/m2m100_1.2B": 1024,
-    "facebook/opt-350m": 3072,
-    "facebook/opt-1.3B": 3072,
+    "facebook/opt-350m": 1024,
+    "facebook/opt-1.3B": 1024,
 }
 
 ALPHA = 0.1

@@ -6,12 +6,14 @@ Implement functions concerned with data loading and preprocessing.
 from typing import Dict
 
 # EXT
+import codecs
 import torch
 from torch.utils.data import DataLoader, Dataset
 from typing import Tuple
 
 # PROJECT
 from src.custom_types import Tokenizer, Device
+from src.defaults import DATASET_TASKS
 
 # CONSTANTS
 SUFFIX = {
@@ -51,6 +53,41 @@ class ParallelDataset(Dataset):
         return data
 
 
+class TextDataset(Dataset):
+    def __init__(self, data, tokenizer: Tokenizer, device: Device, ravfogel_prompt: bool = False, **tokenizer_kwargs):
+        super().__init__()
+
+        self.tokenizer = tokenizer
+        self.device = device
+        self.tokenizer_kwargs = tokenizer_kwargs
+        self.data = [line.strip() for line in data]
+        self.ravfogel_prompt = ravfogel_prompt
+        self.length = len(self.data)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        tokenized = self.tokenizer(self.data[idx], return_tensors="pt", **self.tokenizer_kwargs)
+
+        if not self.ravfogel_prompt:
+            data = {
+                "input_ids": tokenized["input_ids"].squeeze(0)[:-1].to(self.device),
+                "attention_mask": tokenized["attention_mask"].squeeze(0)[:-1].to(self.device),
+                "decoder_input_ids": tokenized["input_ids"].squeeze(0)[1:].to(self.device),
+                "labels": tokenized["input_ids"].squeeze(0)[1:].to(self.device),
+            }
+
+        # Use the prompt style by Ravfogel et al. (2023): 35 initial tokens followed by generation
+        else:
+            data = {
+                "input_ids": tokenized["input_ids"].squeeze(0)[:35].to(self.device),
+                "attention_mask": tokenized["attention_mask"][:35].squeeze(0).to(self.device),
+            }
+
+        return data
+
+
 def load_data(
     dataset_name: str,
     tokenizer: Tokenizer,
@@ -84,29 +121,51 @@ def load_data(
         DataLoader containing the dataset.
     """
     data_loaders = {}
+    task_type = DATASET_TASKS[dataset_name]
 
-    for split_name in load_splits:
-        src_lang, tgt_lang = dataset_name[:2], dataset_name[2:]
-        src_suffix, tgt_suffix = SUFFIX[src_lang], SUFFIX[tgt_lang]
+    if task_type == "mt":
 
-        # Load splits
-        src_split = (line for line in open(
-            f"{data_dir}/{dataset_name}/{split_name}.{src_suffix}",
-            "r"
-        ))
-        tgt_split = (line for line in open(
-            f"{data_dir}/{dataset_name}/{split_name}.{tgt_suffix}",
-            "r"
-        ))
+        for split_name in load_splits:
 
-        dataset = ParallelDataset(src_split, tgt_split, tokenizer, device, **tokenizer_kwargs)
+            src_lang, tgt_lang = dataset_name[:2], dataset_name[2:]
+            src_suffix, tgt_suffix = SUFFIX[src_lang], SUFFIX[tgt_lang]
 
-        # Collate into dataloader
-        split_dl = DataLoader(
-            dataset, batch_size=batch_size
-        )
-        del src_split, tgt_split, dataset
+            # Load splits
+            src_split = (line for line in open(
+                f"{data_dir}/{dataset_name}/{split_name}.{src_suffix}",
+                "r"
+            ))
+            tgt_split = (line for line in open(
+                f"{data_dir}/{dataset_name}/{split_name}.{tgt_suffix}",
+                "r"
+            ))
 
-        data_loaders[split_name] = split_dl
+            dataset = ParallelDataset(src_split, tgt_split, tokenizer, device, **tokenizer_kwargs)
+
+            # Collate into dataloader
+            split_dl = DataLoader(
+                dataset, batch_size=batch_size
+            )
+            del src_split, tgt_split, dataset
+
+            data_loaders[split_name] = split_dl
+
+    elif task_type == "lm":
+
+        data_split = codecs.open(f"{data_dir}/{dataset_name}/{dataset_name}.txt", "r", "utf-8").readlines()
+
+        if "dev" in load_splits:
+            dev_dataset = TextDataset(data_split[:10000], tokenizer, device, **tokenizer_kwargs)
+            dev_dl = DataLoader(
+                dev_dataset, batch_size=batch_size
+            )
+            data_loaders["dev"] = dev_dl
+
+        if "test" in load_splits:
+            test_dataset = TextDataset(data_split[10000:], tokenizer, device, ravfogel_prompt=True, **tokenizer_kwargs)
+            test_dl = DataLoader(
+                test_dataset, batch_size=batch_size
+            )
+            data_loaders["test"] = test_dl
 
     return data_loaders

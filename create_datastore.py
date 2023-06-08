@@ -12,12 +12,14 @@ from typing import Optional, List
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
+from transformers import M2M100PreTrainedModel
 
 # PROJECT
 from src.data import load_data
 from src.datastore import CONFORMITY_SCORES, build_calibration_data
 from src.defaults import (
-    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, HF_RESOURCES
+    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, HF_RESOURCES,
+    DATASET_TASKS
 )
 from src.custom_types import Device
 from src.utils import shard_model
@@ -56,11 +58,16 @@ def create_datastore(
     np.random.seed(seed)
 
     # Load data
-    src_lang, tgt_lang = DATASETS[dataset]
+    task = DATASET_TASKS[dataset]
     model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
-    tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
 
-    # TODO: Support different data loader
+    if task == "mt":
+        src_lang, tgt_lang = DATASETS[dataset]
+        tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    else:
+        tokenizer = tokenizer_class.from_pretrained(model_identifier)
+
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
