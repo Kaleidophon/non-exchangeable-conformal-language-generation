@@ -220,7 +220,7 @@ def evaluate_generations(
 
     # Compute mean and std dev
     print_results = {
-        f"{key}": f"{np.mean(value):.4f} ± {np.std(value):.4f}"
+        f"{key}_summary": f"{np.mean(value):.2f} \pm {np.std(value):.2f}"
         for key, value in results.items()
     }
     results.update(print_results)
