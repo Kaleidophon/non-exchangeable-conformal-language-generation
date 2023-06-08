@@ -16,14 +16,13 @@ from knockknock import telegram_sender
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 import wandb
 
 # PROJECT
 from src.data import load_data, SUFFIX
 from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
-    ALPHA, TEMPERATURE, NUM_NEIGHBORS
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS, HF_RESOURCES
 )
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device, WandBRun
@@ -65,7 +64,7 @@ def run_experiments(
     result_dir: str,
     datastore_dir: str,
     ignore_token_ids: Tuple[int] = (1, 2),
-    sharding: Optional[List[Device]] = None,
+    sharding: Optional[List[int]] = None,
 ):
     """
     Run experiments for conformal risk control in NLG.
@@ -102,16 +101,18 @@ def run_experiments(
     Dict[str, float]
         Dictionary containing the results of the experiments.
     """
+    model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
+
     # Initialize model
     if sharding is None:
-        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+        model = model_class.from_pretrained(model_identifier).to(device)
 
     # Shard models onto different GPUs
     else:
-        model = shard_model(model_identifier, sharding).to(device)
+        model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
 
     model.eval()
-    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier)
+    tokenizer = tokenizer_class.from_pretrained(model_identifier)
 
     # Load test data
     data_loaders = load_data(

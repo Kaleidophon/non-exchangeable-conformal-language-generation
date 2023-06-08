@@ -7,9 +7,8 @@ back into the decoder, but restricting the attention on the source side. We then
 import argparse
 from collections import defaultdict
 from datetime import datetime
-import json
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
@@ -19,7 +18,6 @@ import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 
 # PROJECT
 from src.conformal import ConformalCalibrator, NonExchangeableConformalLogitProcessor
@@ -28,8 +26,9 @@ from src.data import load_data
 from src.datastore import DataStore
 from src.defaults import (
     BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME,
-    ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR, MODEL_HIDDEN_SIZES, HF_RESOURCES
 )
+from src.utils import shard_model
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -46,7 +45,6 @@ except ImportError:
 
 def perform_hallucinations_experiment(
     model_identifier: str,
-    model: M2M100ForConditionalGeneration,
     dataset: str,
     batch_size: int,
     temperature: float,
@@ -62,6 +60,7 @@ def perform_hallucinations_experiment(
     seed: int = SEED,
     device: Device = "cpu",
     ignore_token_ids: Tuple[int] = (1, 2),
+    sharding: Optional[List[int]] = None,
 ):
     # Set seed
     torch.manual_seed(seed)
@@ -71,8 +70,20 @@ def perform_hallucinations_experiment(
 
     # Load data and model
     src_lang, tgt_lang = DATASETS[dataset]
+    model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
+
+    # Initialize model
+    if sharding is None:
+        model = model_class.from_pretrained(model_identifier).to(device)
+
+    # Shard models onto different GPUs
+    else:
+        model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
+
     model.eval()
-    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    tokenizer = tokenizer_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    # TODO: Support different data loader
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
@@ -227,6 +238,7 @@ def perform_hallucinations_experiment(
         np.sum((coverage_matrix_hallucinatory - means_hallucinatory[None, :]) ** 2, axis=0)
         / non_negative_entries_hallucinatory
     ) / np.sqrt(non_negative_entries_hallucinatory)
+
     def score_set_sizes(set_sizes, means, std_devs):
         return sum([
             stats.norm.logpdf(set_size.item(), loc=mean, scale=std_dev+ 1e-16)
@@ -389,11 +401,8 @@ if __name__ == "__main__":
         tracker.start()
 
     try:
-        data_store = None
-
-        model = M2M100ForConditionalGeneration.from_pretrained(args.model_identifier)
         data_store = DataStore(
-            key_dim=model.config.d_model, value_dim=1,
+            key_dim=MODEL_HIDDEN_SIZES[args.model_identifier], value_dim=1,
             distance_type=args.distance_type,
             num_centroids=args.num_centroids, code_size=args.code_size,
             num_probes=args.num_probes, use_quantization=args.use_quantization,
@@ -403,7 +412,6 @@ if __name__ == "__main__":
 
         perform_hallucinations_experiment(
             model_identifier=args.model_identifier,
-            model=model,
             dataset=args.dataset,
             batch_size=args.batch_size,
             temperature=args.temperature,

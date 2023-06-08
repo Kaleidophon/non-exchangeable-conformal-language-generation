@@ -3,18 +3,20 @@ Miscellaneous utility functions.
 """
 
 # STD
-from typing import List
+from typing import Type, List
 
 # EXT
 from accelerate import infer_auto_device_map, init_empty_weights
 from accelerate.utils.modeling import get_max_memory
-from transformers import M2M100ForConditionalGeneration, M2M100Config, AutoModel
+from transformers import PreTrainedModel, AutoModel, AutoConfig
 
 
 def shard_model(
     model_identifier: str,
-    sharding_devices: List[str]
-) -> M2M100ForConditionalGeneration:
+    sharding_devices: List[int],
+    model_class: Type[PreTrainedModel],
+    config_class: Type[AutoConfig]
+) -> PreTrainedModel:
     """
     Load model onto multiple GPUs at once.
     """
@@ -25,7 +27,7 @@ def shard_model(
         if device in sharding_devices or device == "cpu"
     }
 
-    config = M2M100Config.from_pretrained(model_identifier)
+    config = config_class.from_pretrained(model_identifier)
 
     with init_empty_weights():
         model = AutoModel.from_config(config)
@@ -33,7 +35,7 @@ def shard_model(
     device_map = infer_auto_device_map(model, max_memory=max_memory)
 
     model.tie_weights()
-    model = M2M100ForConditionalGeneration.from_pretrained(
+    model = model_class.from_pretrained(
         model_identifier, device_map=device_map, max_memory=max_memory
     )
 

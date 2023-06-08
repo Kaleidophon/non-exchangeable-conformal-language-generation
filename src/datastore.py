@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers import PreTrainedModel
 
 # PROJECT
 from src.conformal import simple_conformity_scores, adaptive_conformity_score
@@ -30,7 +30,7 @@ CONFORMITY_SCORES = {
     "adaptive": adaptive_conformity_score
 }
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["KMP_DUPLICATE_LIB_OK"] ="TRUE"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 class DataStore:
@@ -205,11 +205,11 @@ class DataStore:
 
 
 def build_calibration_data(
-    model: MBartForConditionalGeneration,
+    model: PreTrainedModel,
     data_loader: DataLoader,
     distance_type: str = "inner_product",
     conformity_score: str = "adaptive",
-    ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    ignore_token_ids: Tuple[int] = (1, 2),
     device: Device = "cpu",
     **datastore_kwargs,
 ) -> DataStore:
@@ -218,7 +218,7 @@ def build_calibration_data(
 
     Parameters
     ----------
-    model: MBartForConditionalGeneration
+    model: PreTrainedModel
         Model to be used for the experiments.
     data_loader: DataLoader
         Data loader to be used for the experiments.

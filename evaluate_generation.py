@@ -23,14 +23,13 @@ from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
 from tqdm import tqdm
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 from transformers.generation import SampleEncoderDecoderOutput
 
 # PROJECT
 from src.data import load_data, SUFFIX
 from src.defaults import (
     DATA_DIR, RESULT_DIR, EMISSION_DIR, MODEL_IDENTIFIER, PROJECT_NAME, SEED, BATCH_SIZE, DATASETS,
-    GENERATION_METHODS, ALPHA, TEMPERATURE, NUM_NEIGHBORS, NUM_BEAMS, TOP_P, TOP_K, SEQUENCE_LENGTH
+    GENERATION_METHODS, ALPHA, TEMPERATURE, NUM_NEIGHBORS, NUM_BEAMS, TOP_P, TOP_K, SEQUENCE_LENGTH, HF_RESOURCES
 )
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
@@ -80,7 +79,7 @@ def evaluate_generations(
     # Other arguments
     seed: int = SEED,
     device: Device = "cpu",
-    sharding: Optional[List[Device]] = None
+    sharding: Optional[List[int]] = None
 ):
     # Set seed
     torch.manual_seed(seed)
@@ -90,17 +89,19 @@ def evaluate_generations(
 
     # Load data and model
     src_lang, tgt_lang = DATASETS[dataset]
+    model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
 
     # Initialize model
     if sharding is None:
-        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+        model = model_class.from_pretrained(model_identifier).to(device)
 
     # Shard models onto different GPUs
     else:
-        model = shard_model(model_identifier, sharding).to(device)
+        model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
 
     model.eval()
-    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    tokenizer = tokenizer_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    # TODO: Support different data loader
     data_loader = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
@@ -375,7 +376,8 @@ if __name__ == "__main__":
         data_store = None
 
         if args.generation_method in ("conformal_nucleus_sampling", "non_exchangeable_nucleus_sampling"):
-            model = M2M100ForConditionalGeneration.from_pretrained(args.model_identifier)
+            model_class, _, _ = HF_RESOURCES[args.model_identifier]
+            model = model_class.from_pretrained(args.model_identifier)
             data_store = DataStore(
                 key_dim=model.config.d_model, value_dim=1,
                 distance_type=args.distance_type,

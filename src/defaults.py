@@ -2,6 +2,11 @@
 Define some default values that are used by other scripts and bundle them here for consistency.
 """
 
+# EXT
+from transformers import (
+    M2M100ForConditionalGeneration, M2M100Config, M2M100Tokenizer, OPTForCausalLM, OPTConfig, AutoTokenizer
+)
+
 # Project-level defaults
 DATA_DIR = "./data/wmt22"
 RESULT_DIR = "./results"
@@ -23,6 +28,21 @@ GENERATION_METHODS = (
     "beam_search", "greedy", "top_k_sampling", "nucleus_sampling", "conformal_nucleus_sampling",
     "non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"
 )
+
+HF_RESOURCES = {
+    "facebook/m2m100_418M": (M2M100ForConditionalGeneration, M2M100Config, M2M100Tokenizer),
+    "facebook/m2m100_1.2B": (M2M100ForConditionalGeneration, M2M100Config, M2M100Tokenizer),
+    "facebook/opt-350m": (OPTForCausalLM, OPTConfig, AutoTokenizer),
+    "facebook/opt-1.3B": (OPTForCausalLM, OPTConfig, AutoTokenizer),
+}
+
+MODEL_HIDDEN_SIZES = {
+    "facebook/m2m100_418M": 1024,
+    "facebook/m2m100_1.2B": 1024,
+    "facebook/opt-350m": 3072,
+    "facebook/opt-1.3B": 3072,
+}
+
 ALPHA = 0.1
 TEMPERATURE = 1
 NUM_NEIGHBORS = 100

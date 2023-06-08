@@ -29,28 +29,6 @@ class ParallelDataset(Dataset):
         self.tokenizer = tokenizer
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
-
-        # TODO: Remove in the future, just for debugging
-        """
-        line_break = 150
-
-        # Process data
-        self.src_data = []
-        for i, line in enumerate(src_data):
-            if i > line_break:
-                break
-
-            self.src_data.append(line.strip())
-
-        self.tgt_data = []
-        for i, line in enumerate(tgt_data):
-            if i > line_break:
-                break
-
-            self.tgt_data.append(line.strip())
-
-        """
-
         self.src_data = [line.strip() for line in src_data]
         self.tgt_data = [line.strip() for line in tgt_data]
 

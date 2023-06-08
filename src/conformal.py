@@ -4,8 +4,6 @@ Define the core functions for conformal risk control in NLG.
 
 # STD
 from collections import namedtuple
-from functools import wraps
-import types
 from typing import Tuple
 
 # EXT

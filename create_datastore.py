@@ -12,13 +12,12 @@ from typing import Optional, List
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 
 # PROJECT
 from src.data import load_data
 from src.datastore import CONFORMITY_SCORES, build_calibration_data
 from src.defaults import (
-    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME
+    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, HF_RESOURCES
 )
 from src.custom_types import Device
 from src.utils import shard_model
@@ -50,7 +49,7 @@ def create_datastore(
     seed: int,
     data_dir: str,
     save_dir: str,
-    sharding: Optional[List[Device]] = None,
+    sharding: Optional[List[int]] = None,
 ):
     # Set seed
     torch.manual_seed(seed)
@@ -58,7 +57,10 @@ def create_datastore(
 
     # Load data
     src_lang, tgt_lang = DATASETS[dataset]
-    tokenizer = M2M100Tokenizer.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
+    tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    # TODO: Support different data loader
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
@@ -69,11 +71,11 @@ def create_datastore(
 
     # Initialize model
     if sharding is None:
-        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+        model = model_class.from_pretrained(model_identifier).to(device)
 
     # Shard models onto different GPUs
     else:
-        model = shard_model(model_identifier, sharding).to(device)
+        model = shard_model(model_identifier, sharding, config_class=config_class, model_class=model_class).to(device)
 
     model.eval()
 

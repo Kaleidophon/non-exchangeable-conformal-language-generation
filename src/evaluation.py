@@ -11,8 +11,6 @@ from typing import Dict, List, Tuple
 
 # EXT
 import evaluate
-from torch.utils.data import DataLoader
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 
 
 def evaluate_model(
@@ -67,44 +65,6 @@ def evaluate_model(
         result_dict["chrf"] = chrf_results["score"]
 
     return result_dict
-
-
-def generate_test_translations(
-    model: MBartForConditionalGeneration,
-    tokenizer: MBart50TokenizerFast,
-    data_loader: DataLoader,
-) -> List[str]:
-    """
-    Generate translations for test set and write them to a file.
-
-    Parameters
-    ----------
-    model: MBartForConditionalGeneration
-        Model to use for translation.
-    tokenizer: MBart50TokenizerFast
-        Tokenizer to use for translation.
-    data_loader: DataLoader
-        Data loader for test set.
-    """
-    model.eval()
-
-    translations = []
-
-    for batch in data_loader:
-        outputs = model.generate(
-            input_ids=batch["input_ids"],
-            attention_mask=batch["attention_mask"],
-            num_beams=4,
-            max_length=128,
-            early_stopping=True,
-            decoder_start_token_id=tokenizer.lang_code_to_id["en_XX"]
-        )
-
-        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-        translations += outputs
-
-    return translations
 
 
 def evaluate_comet(
