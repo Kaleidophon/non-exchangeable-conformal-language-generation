@@ -285,7 +285,8 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
         distance_type: str,
         num_neighbors: int,
         data_store,
-        calibrator: ConformalCalibrator
+        calibrator: ConformalCalibrator,
+        store_set_sizes: bool = False,
     ):
         super().__init__()
         self.distance_type = distance_type
@@ -294,7 +295,10 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
         self.data_store = data_store
         self.calibrator = calibrator
 
+        self.store_set_sizes = store_set_sizes
+
         self.last_decoder_encodings = None
+        self.last_set_sizes = []
 
     def patch_model(self, model: PreTrainedModel) -> PreTrainedModel:
         """
@@ -338,7 +342,10 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
             )
             q_hat = conformal_results["q_hat"]
             scores = F.softmax(scores, dim=-1)
-            scores, set_size = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hat)
+            scores, set_sizes = self.calibrator.get_prediction_sets(self.conformity_score, scores, q_hat)
+
+            if self.store_set_sizes:
+                self.last_set_sizes.append(set_sizes)
 
             # Put back into log space
             scores = torch.log(scores + 1e-12)

@@ -17,31 +17,11 @@ from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 # PROJECT
 from src.data import load_data
 from src.datastore import CONFORMITY_SCORES, build_calibration_data
+from src.defaults import (
+    BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME
+)
 from src.custom_types import Device
 from src.utils import shard_model
-
-# CONST
-DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models"
-EMISSION_DIR = "./emissions"
-PROJECT_NAME = "nlg-conformal-risk-control"
-MODEL_IDENTIFIER = "facebook/m2m100_418M"
-# Map available language pairs to language identifiers for tokenizer
-DATASETS = {
-    "deen": ("de", "en"),
-    "jaen": ("ja", "en")
-}
-
-# DEFAULTS
-SEED = 1234
-BATCH_SIZE = 4
-SEQUENCE_LENGTH = 128
-NUM_TRAINING_STEPS = 40000
-NUM_WARMUP_STEPS = 2500
-LEARNING_RATE = 3e-05
-BETAS = (0.9, 0.98)
-VALIDATION_INTERVAL = 1000
-WEIGHT_DECAY = 0
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -180,7 +160,6 @@ if __name__ == "__main__":
         default=None
     )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
-    parser.add_argument("--model-dir", type=str, default=MODEL_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
     parser.add_argument("--track-emissions", action="store_true")
     parser.add_argument("--device", type=str, default="cpu")

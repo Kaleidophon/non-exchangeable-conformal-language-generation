@@ -5,7 +5,6 @@ Conduct experiments for conformal risk control in NLG.
 # STD
 import argparse
 from datetime import datetime
-import math
 import os
 from typing import Optional, Dict, Tuple, List
 
@@ -22,30 +21,14 @@ import wandb
 
 # PROJECT
 from src.data import load_data, SUFFIX
+from src.defaults import (
+    BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS
+)
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device, WandBRun
 from src.datastore import DataStore
 from src.utils import shard_model
-
-# CONST
-DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models/"
-RESULT_DIR = "./results"
-EMISSION_DIR = "./emissions"
-MODEL_IDENTIFIER = "facebook/m2m100_418M"
-PROJECT_NAME = "nlg-conformal-risk-control"
-# Map available language pairs to language identifiers for tokenizer
-DATASETS = {
-    "deen": ("de", "en"),
-    "jaen": ("ja", "en")
-}
-
-# DEFAULTS
-SEED = 1234
-BATCH_SIZE = 4
-ALPHA = 0.1
-TEMPERATURE = 1
-NUM_NEIGHBORS = 100
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -81,7 +64,7 @@ def run_experiments(
     data_dir: str,
     result_dir: str,
     datastore_dir: str,
-    ignore_token_ids: Tuple[int] = (1, 2),  # TODO: Double-check this default
+    ignore_token_ids: Tuple[int] = (1, 2)
     sharding: Optional[List[Device]] = None,
 ):
     """

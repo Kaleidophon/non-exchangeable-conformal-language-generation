@@ -27,39 +27,16 @@ from transformers.generation import SampleEncoderDecoderOutput
 
 # PROJECT
 from src.data import load_data, SUFFIX
+from src.defaults import (
+    DATA_DIR, RESULT_DIR, EMISSION_DIR, MODEL_IDENTIFIER, PROJECT_NAME, SEED, BATCH_SIZE, DATASETS,
+    GENERATION_METHODS, ALPHA, TEMPERATURE, NUM_NEIGHBORS, NUM_BEAMS, TOP_P, TOP_K, SEQUENCE_LENGTH
+)
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
 from src.datastore import DataStore
 from src.evaluation import evaluate_model
 from src.utils import shard_model
 
-# CONST
-DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models/"
-RESULT_DIR = "./results"
-EMISSION_DIR = "./emissions"
-MODEL_IDENTIFIER = "facebook/m2m100_418M"
-PROJECT_NAME = "nlg-conformal-risk-control"
-# Map available language pairs to language identifiers for tokenizer
-DATASETS = {
-    "deen": ("de", "en"),
-    "jaen": ("ja", "en")
-}
-GENERATION_METHODS = (
-    "beam_search", "greedy", "top_k_sampling", "nucleus_sampling", "conformal_nucleus_sampling",
-    "non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"
-)
-
-# DEFAULTS
-SEED = 1234
-BATCH_SIZE = 4
-ALPHA = 0.1
-TEMPERATURE = 1
-NUM_NEIGHBORS = 100
-SEQUENCE_LENGTH = 128
-NUM_BEAMS = 5
-TOP_P = 0.9
-TOP_K = 10
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -225,11 +202,6 @@ def evaluate_generations(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=MODEL_IDENTIFIER
-    )
     parser.add_argument(
         "--save-dir",
         type=str,

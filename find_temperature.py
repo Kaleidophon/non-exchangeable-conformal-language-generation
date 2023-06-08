@@ -20,35 +20,14 @@ import wandb
 
 # PROJECT
 from src.data import load_data
+from src.defaults import (
+    BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
+    STEP_SIZE, SEARCH_SPACE, NUM_BATCHES, TEMPERATURE, ALPHA, NUM_ATTEMPTS, NUM_NEIGHBORS
+)
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device
 from src.datastore import DataStore
 from src.utils import shard_model
-
-# CONST
-DATA_DIR = "./data/wmt22"
-MODEL_DIR = "./models/"
-RESULT_DIR = "./results"
-EMISSION_DIR = "./emissions"
-MODEL_IDENTIFIER = "facebook/m2m100_418M"
-PROJECT_NAME = "nlg-conformal-risk-control"
-# Map available language pairs to language identifiers for tokenizer
-DATASETS = {
-    "deen": ("de", "en"),
-    "jaen": ("ja", "en")
-}
-
-# DEFAULTS
-SEED = 1234
-BATCH_SIZE = 4
-ALPHA = 0.1
-TEMPERATURE = 1
-NUM_NEIGHBORS = 100
-NUM_ATTEMPTS = 20
-SEARCH_SPACE = (0.01, 25)
-STEP_SIZE = 0.1
-NUM_BATCHES = 10
-
 
 # GLOBALS
 SECRET_IMPORTED = False
