@@ -6,6 +6,7 @@ Create the datastore for a model on a specified dataset.
 import argparse
 from datetime import datetime
 import os
+from typing import Optional, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
@@ -16,10 +17,11 @@ from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 # PROJECT
 from src.data import load_data
 from src.datastore import CONFORMITY_SCORES, build_calibration_data
-from src.custom_types import Device
 from src.defaults import (
     BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME
 )
+from src.custom_types import Device
+from src.utils import shard_model
 
 # GLOBALS
 SECRET_IMPORTED = False
@@ -48,6 +50,7 @@ def create_datastore(
     seed: int,
     data_dir: str,
     save_dir: str,
+    sharding: Optional[List[Device]] = None,
 ):
     # Set seed
     torch.manual_seed(seed)
@@ -65,7 +68,13 @@ def create_datastore(
     )
 
     # Initialize model
-    model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+    if sharding is None:
+        model = M2M100ForConditionalGeneration.from_pretrained(model_identifier).to(device)
+
+    # Shard models onto different GPUs
+    else:
+        model = shard_model(model_identifier, sharding).to(device)
+
     model.eval()
 
     # Populate data score
@@ -144,6 +153,12 @@ if __name__ == "__main__":
         type=int,
         default=2048
     )
+    parser.add_argument(
+        "--sharding",
+        type=int,
+        nargs="+",
+        default=None
+    )
     parser.add_argument("--data-dir", type=str, default=DATA_DIR)
     parser.add_argument("--emission-dir", type=str, default=EMISSION_DIR)
     parser.add_argument("--track-emissions", action="store_true")
@@ -179,6 +194,7 @@ if __name__ == "__main__":
             seed=args.seed,
             data_dir=args.data_dir,
             save_dir=args.save_dir,
+            sharding=args.sharding,
         )
 
     except Exception as e:
