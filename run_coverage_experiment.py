@@ -64,7 +64,7 @@ def run_experiments(
     data_dir: str,
     result_dir: str,
     datastore_dir: str,
-    ignore_token_ids: Tuple[int] = (1, 2)
+    ignore_token_ids: Tuple[int] = (1, 2),
     sharding: Optional[List[Device]] = None,
 ):
     """
@@ -356,6 +356,7 @@ if __name__ == "__main__":
             project_name=PROJECT_NAME,
             country_iso_code=COUNTRY_CODE,
             output_dir=emissions_path,
+            log_level="error"
         )
         tracker.start()
 

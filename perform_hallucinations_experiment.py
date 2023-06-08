@@ -384,6 +384,7 @@ if __name__ == "__main__":
             project_name=PROJECT_NAME,
             country_iso_code=COUNTRY_CODE,
             output_dir=emissions_path,
+            log_level="error"
         )
         tracker.start()
 

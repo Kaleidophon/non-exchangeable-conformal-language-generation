@@ -228,7 +228,8 @@ def evaluate_generations(
     print(results)
 
     # Save results to path
-    with open(f"{result_dir}/{timestamp}_{model_identifier}_{generation_method}_results.txt", "w") as results_file:
+    result_path = f"{result_dir}/{timestamp}_{model_identifier.replace('/', '_')}_{generation_method}_results.txt"
+    with open(result_path, "w") as results_file:
         results_file.write(json.dumps(results))
 
 
@@ -366,6 +367,7 @@ if __name__ == "__main__":
             project_name=PROJECT_NAME,
             country_iso_code=COUNTRY_CODE,
             output_dir=emissions_path,
+            log_level="error"
         )
         tracker.start()
 
