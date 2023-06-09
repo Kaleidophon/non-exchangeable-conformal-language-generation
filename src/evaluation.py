@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple
 import evaluate
 
 
-def evaluate_model(
+def evaluate_translation_model(
     translations: List[str],
     source_file: str,
     reference_file: str,

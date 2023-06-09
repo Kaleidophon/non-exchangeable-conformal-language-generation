@@ -268,6 +268,7 @@ def build_calibration_data(
     )
     all_hidden = torch.empty((0, model_hidden_size), dtype=torch.float16).to(device)
     all_conformity_scores = torch.empty((0, 1), dtype=torch.float16).to(device)
+    all_entropies = torch.empty((0, 1), dtype=torch.float16).to(device)
 
     model.eval()
 
@@ -315,9 +316,13 @@ def build_calibration_data(
         # Compute non-conformity scores
         conformity_scores = CONFORMITY_SCORES[conformity_score](predictions, labels)
 
+        # Compute entropies
+        entropies = -torch.sum(predictions * torch.log(predictions), dim=-1).unsqueeze(-1)
+
         # Add to existing ones
         all_hidden = torch.cat([all_hidden, hidden_states], dim=0)
         all_conformity_scores = torch.cat([all_conformity_scores, conformity_scores], dim=0)
+        all_entropies = torch.cat([all_entropies, entropies], dim=0)
 
     # Normalize distances by dimensionality to make distance computation easier
     # We want to scale the inner products "transformer attention-style" by the square root of the hidden dimensionality,
@@ -343,6 +348,6 @@ def build_calibration_data(
 
     # Add calibration points
     print(f"Adding {num_latents} data points to the index...")
-    calibration_data.add(all_hidden, all_conformity_scores)
+    calibration_data.add(all_hidden, all_conformity_scores, all_entropies)
 
     return calibration_data

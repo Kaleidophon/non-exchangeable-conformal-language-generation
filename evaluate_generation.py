@@ -35,7 +35,7 @@ from src.defaults import (
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
 from src.datastore import DataStore
-from src.evaluation import evaluate_model
+from src.evaluation import evaluate_translation_model
 from src.utils import shard_model
 
 
@@ -134,6 +134,7 @@ def evaluate_generations(
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
         assert num_beams is not None, "num_beams must be specified for beam search"
+        assert task == "mt", "Beam search is only supported for machine translation"
         generation_config["num_beams"] = num_beams
         generation_config["do_sample"] = False
 
@@ -208,12 +209,14 @@ def evaluate_generations(
             translations[n] += outputs
 
     # Generate results
-    src_abbr = src_lang[:2]
-    tgt_abbr = tgt_lang[:2]
-    source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
-    reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
+    if task == "mt":
+        src_abbr = src_lang[:2]
+        tgt_abbr = tgt_lang[:2]
+        source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
+        reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
+
     partial_results = [
-        evaluate_model(translations[n], source_file, reference_file, metrics=evaluation_metrics)
+        evaluate_translation_model(translations[n], source_file, reference_file, metrics=evaluation_metrics)
         for n in range(num_samples)
     ]
 
