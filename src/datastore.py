@@ -107,7 +107,8 @@ class DataStore:
             co = faiss.GpuClonerOptions()
             co.useFloat16 = True  # to avoid GPU memory issue
             resources = faiss.StandardGpuResources()
-            self.index = faiss.index_cpu_to_gpu(resources, 0, self.index, co)
+            gpu_number = int(self.device.split(":")[-1])
+            self.index = faiss.index_cpu_to_gpu(resources, gpu_number, self.index, co)
 
         self.value_tensor = torch.empty((0, self.value_dim), dtype=torch.float16).to(device)
         self.entropy_tensor = torch.empty((0, 1), dtype=torch.float16).to(device)

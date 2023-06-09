@@ -164,7 +164,7 @@ def load_data(
 
         if "test" in load_splits:
             test_dataset = TextDataset(
-                data_split[10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
+                data_split[-10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
             test_dl = DataLoader(
                 test_dataset, batch_size=batch_size
