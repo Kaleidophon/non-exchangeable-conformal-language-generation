@@ -389,8 +389,15 @@ if __name__ == "__main__":
         if args.generation_method in ("conformal_nucleus_sampling", "non_exchangeable_nucleus_sampling"):
             model_class, _, _ = HF_RESOURCES[args.model_identifier]
             model = model_class.from_pretrained(args.model_identifier)
+
+            try:
+                model_hidden_size = model.config.d_model
+
+            except:
+                model_hidden_size = int(model.config.hidden_size / 2)
+
             data_store = DataStore(
-                key_dim=model.config.d_model, value_dim=1,
+                key_dim=model_hidden_size, value_dim=1,
                 distance_type=args.distance_type,
                 num_centroids=args.num_centroids, code_size=args.code_size,
                 num_probes=args.num_probes, use_quantization=args.use_quantization,

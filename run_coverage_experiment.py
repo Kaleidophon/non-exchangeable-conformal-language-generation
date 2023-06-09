@@ -132,9 +132,15 @@ def run_experiments(
     )
     data_loader = data_loaders["test"]
 
+    try:
+        model_hidden_size = model.config.d_model
+
+    except:
+        model_hidden_size = int(model.config.hidden_size / 2)
+
     # Load calibration data
     data_store = DataStore(
-        key_dim=model.config.d_model, value_dim=1,
+        key_dim=model_hidden_size, value_dim=1,
         distance_type=distance_type,
         num_centroids=num_centroids, code_size=code_size,
         num_probes=num_probes, use_quantization=use_quantization,

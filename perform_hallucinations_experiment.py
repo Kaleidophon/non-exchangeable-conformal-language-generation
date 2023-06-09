@@ -408,6 +408,7 @@ if __name__ == "__main__":
         tracker.start()
 
     try:
+
         data_store = DataStore(
             key_dim=MODEL_HIDDEN_SIZES[args.model_identifier], value_dim=1,
             distance_type=args.distance_type,

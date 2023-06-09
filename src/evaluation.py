@@ -62,6 +62,24 @@ def evaluate_translation_model(
 
     return result_dict
 
+def evaluate_generation_model(
+    generations: List[str],
+    reference_file: str,
+    metrics: Tuple[str] = ("mauve", "bleurt")
+):
+    # Load reference generations
+    with codecs.open(reference_file, "r", "utf-8") as f:
+        reference_translations = [line.strip() for line in f.readlines()]
+
+    # Evaluate translations
+    result_dict = {}
+
+    if "mauve" in metrics:
+        mauve = evaluate.load("mauve")
+        mauve_results = mauve.compute(predictions=generations, references=reference_translations)
+        result_dict["mauve"] = mauve_results["score"]
+
+
 
 def evaluate_comet(
     translations: List[str],

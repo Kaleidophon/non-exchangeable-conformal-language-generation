@@ -45,8 +45,8 @@ HF_RESOURCES = {
 MODEL_HIDDEN_SIZES = {
     "facebook/m2m100_418M": 1024,
     "facebook/m2m100_1.2B": 1024,
-    "facebook/opt-350m": 1024,
-    "facebook/opt-1.3B": 1024,
+    "facebook/opt-350m": 512,
+    "facebook/opt-1.3B": 512,
 }
 
 ALPHA = 0.1
