@@ -95,6 +95,7 @@ def load_data(
     device: Device,
     data_dir: str,
     load_splits: Tuple[str, ...] = ("train", "dev", "test"),
+    use_ravfogel_prompt: bool = False,
     **tokenizer_kwargs
 ) -> Dict[str, DataLoader]:
     """
@@ -162,7 +163,9 @@ def load_data(
             data_loaders["dev"] = dev_dl
 
         if "test" in load_splits:
-            test_dataset = TextDataset(data_split[10000:], tokenizer, device, ravfogel_prompt=True, **tokenizer_kwargs)
+            test_dataset = TextDataset(
+                data_split[10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
+            )
             test_dl = DataLoader(
                 test_dataset, batch_size=batch_size
             )

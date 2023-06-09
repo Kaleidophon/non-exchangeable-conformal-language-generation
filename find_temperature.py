@@ -14,6 +14,7 @@ from einops import rearrange
 import numpy as np
 import torch
 import torch.nn.functional as F
+from transformers import M2M100PreTrainedModel
 from tqdm import tqdm
 import wandb
 
@@ -21,7 +22,7 @@ import wandb
 from src.data import load_data
 from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
-    STEP_SIZE, SEARCH_SPACE, NUM_BATCHES, TEMPERATURE, ALPHA, NUM_ATTEMPTS, NUM_NEIGHBORS, HF_RESOURCES
+    STEP_SIZE, SEARCH_SPACE, NUM_BATCHES, TEMPERATURE, ALPHA, NUM_ATTEMPTS, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS
 )
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device
@@ -103,10 +104,16 @@ def find_temperature(
         model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
 
     model.eval()
-    tokenizer = tokenizer_class.from_pretrained(model_identifier)
+    task = DATASET_TASKS[dataset]
+
+    if task == "mt":
+        src_lang, tgt_lang = DATASETS[dataset]
+        tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    else:
+        tokenizer = tokenizer_class.from_pretrained(model_identifier)
 
     # Load test data
-    # TODO: Support different data loader
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         load_splits=("dev", ),
@@ -155,32 +162,45 @@ def find_temperature(
                 decoder_input_ids = batch["decoder_input_ids"].to(model.device)
                 labels = batch["labels"].to(model.device)
 
+                forward_kwargs = {
+                    "output_hidden_states": True,
+                    "return_dict": True,
+                }
+
+                if isinstance(model, M2M100PreTrainedModel):
+                    forward_kwargs["decoder_inputs_ids"] = decoder_input_ids
+
                 # Generate outputs
-                outputs = model.forward(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    output_hidden_states=True,
-                    decoder_input_ids=decoder_input_ids,
-                    return_dict=True,
-                )
-                decoder_states = outputs.decoder_hidden_states[-1]
+                with torch.no_grad():
+                    outputs = model.forward(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        **forward_kwargs
+                    )
+
+                if isinstance(model, M2M100PreTrainedModel):
+                    hidden_states = outputs.decoder_hidden_states[-1]
+
+                else:
+                    hidden_states = outputs.hidden_states[-1]
+
                 predictions = F.softmax(outputs.logits, dim=-1)
 
                 # Reshape and filter out ignore tokens
-                decoder_states = rearrange(decoder_states, "b s h -> (b s) h")
+                hidden_states = rearrange(hidden_states, "b s h -> (b s) h")
                 predictions = rearrange(predictions, "b s c -> (b s) c")
                 input_ids = rearrange(input_ids, "b s -> (b s)")
                 labels = rearrange(labels, "b s -> (b s)")
                 mask = torch.all(
                     torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
                 ).to(device)
-                decoder_states = decoder_states[mask]
+                hidden_states = hidden_states[mask]
 
                 if distance_type == "inner_product":
-                    decoder_states /= model.config.d_model ** 0.25
+                    hidden_states /= model.config.d_model ** 0.25
 
                 elif distance_type == "cosine":
-                    decoder_states = F.normalize(decoder_states, p=2, dim=-1)
+                    hidden_states = F.normalize(hidden_states, p=2, dim=-1)
 
                 predictions = predictions[mask]
                 labels = labels[mask]
@@ -190,10 +210,10 @@ def find_temperature(
 
                 # This can be hard on memory so we do it in batches
                 bbatch_size = 1  # TODO: Debug batch_size
-                for i in range(0, len(decoder_states), bbatch_size):
+                for i in range(0, len(hidden_states), bbatch_size):
 
                     batch_distances, batch_conformity_scores = data_store.search_k(
-                        decoder_states[i:i+bbatch_size, :], k=num_neighbors
+                        hidden_states[i:i+bbatch_size, :], k=num_neighbors
                     )
                     distances.append(batch_distances)
                     conformity_scores.append(batch_conformity_scores)

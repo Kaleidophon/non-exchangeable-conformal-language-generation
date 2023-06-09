@@ -12,7 +12,6 @@ from typing import Optional, List
 from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
-from transformers import M2M100PreTrainedModel
 
 # PROJECT
 from src.data import load_data

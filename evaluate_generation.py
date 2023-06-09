@@ -29,7 +29,8 @@ from transformers.generation import SampleEncoderDecoderOutput
 from src.data import load_data, SUFFIX
 from src.defaults import (
     DATA_DIR, RESULT_DIR, EMISSION_DIR, MODEL_IDENTIFIER, PROJECT_NAME, SEED, BATCH_SIZE, DATASETS,
-    GENERATION_METHODS, ALPHA, TEMPERATURE, NUM_NEIGHBORS, NUM_BEAMS, TOP_P, TOP_K, SEQUENCE_LENGTH, HF_RESOURCES
+    GENERATION_METHODS, ALPHA, TEMPERATURE, NUM_NEIGHBORS, NUM_BEAMS, TOP_P, TOP_K, SEQUENCE_LENGTH, HF_RESOURCES,
+    DATASET_TASKS
 )
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
@@ -88,8 +89,15 @@ def evaluate_generations(
     timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
 
     # Load data and model
-    src_lang, tgt_lang = DATASETS[dataset]
+    task = DATASET_TASKS[dataset]
     model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
+
+    if task == "mt":
+        src_lang, tgt_lang = DATASETS[dataset]
+        tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    else:
+        tokenizer = tokenizer_class.from_pretrained(model_identifier)
 
     # Initialize model
     if sharding is None:
@@ -100,8 +108,6 @@ def evaluate_generations(
         model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
 
     model.eval()
-    tokenizer = tokenizer_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
-    # TODO: Support different data loader
     data_loader = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",

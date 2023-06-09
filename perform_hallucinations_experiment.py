@@ -26,7 +26,7 @@ from src.data import load_data
 from src.datastore import DataStore
 from src.defaults import (
     BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME,
-    ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR, MODEL_HIDDEN_SIZES, HF_RESOURCES
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR, MODEL_HIDDEN_SIZES, HF_RESOURCES, DATASET_TASKS
 )
 from src.utils import shard_model
 
@@ -81,14 +81,21 @@ def perform_hallucinations_experiment(
         model = shard_model(model_identifier, sharding, model_class=model_class, config_class=config_class).to(device)
 
     model.eval()
-    tokenizer = tokenizer_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+    task = DATASET_TASKS[dataset]
 
-    # TODO: Support different data loader
+    if task == "mt":
+        src_lang, tgt_lang = DATASETS[dataset]
+        tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+
+    else:
+        tokenizer = tokenizer_class.from_pretrained(model_identifier)
+
     data_loaders = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
         truncation=True,
+        use_ravfogel_prompt=True,
         load_splits=("dev", "test")
     )
 
