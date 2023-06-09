@@ -8,7 +8,7 @@ from typing import Type, List
 # EXT
 from accelerate import infer_auto_device_map, init_empty_weights
 from accelerate.utils.modeling import get_max_memory
-from transformers import PreTrainedModel, AutoModel, AutoConfig
+from transformers import PreTrainedModel, AutoModel, AutoConfig, OPTPreTrainedModel
 
 
 def shard_model(
@@ -30,11 +30,17 @@ def shard_model(
     config = config_class.from_pretrained(model_identifier)
 
     with init_empty_weights():
-        model = AutoModel.from_config(config)
+        if "opt" in model_identifier:
+            # Load into CPU first to infer device map
+            model = model_class.from_pretrained(model_identifier)
+
+        else:
+            model = AutoModel.from_config(config)
 
     device_map = infer_auto_device_map(model, max_memory=max_memory)
+    del model
 
-    model.tie_weights()
+    # Reload with device map
     model = model_class.from_pretrained(
         model_identifier, device_map=device_map, max_memory=max_memory
     )
