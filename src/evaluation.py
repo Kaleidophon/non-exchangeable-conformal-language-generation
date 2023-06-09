@@ -10,6 +10,7 @@ import subprocess
 from typing import Dict, List, Tuple
 
 # EXT
+import numpy as np
 import evaluate
 
 
@@ -69,15 +70,22 @@ def evaluate_generation_model(
 ):
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
-        reference_translations = [line.strip() for line in f.readlines()]
+        reference_generations = [line.strip() for line in f.readlines()]
 
     # Evaluate translations
     result_dict = {}
 
     if "mauve" in metrics:
         mauve = evaluate.load("mauve")
-        mauve_results = mauve.compute(predictions=generations, references=reference_translations)
-        result_dict["mauve"] = mauve_results["score"]
+        mauve_results = mauve.compute(predictions=generations, references=reference_generations)
+        result_dict["mauve"] = mauve_results.mauve
+
+    if "bleurt" in metrics:
+        bleurt = evaluate.load("bleurt", module_type="metric")
+        bleurt_results = bleurt.compute(predictions=generations, references=reference_generations)
+        result_dict["bleurt"] = np.mean(bleurt_results["scores"])
+
+    return result_dict
 
 
 

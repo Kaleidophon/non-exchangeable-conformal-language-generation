@@ -213,7 +213,7 @@ def run_experiments(
             hidden_states = hidden_states[mask]
 
             if distance_type == "inner_product":
-                 hidden_states /= model.config.d_model ** 0.25
+                 hidden_states /= model_hidden_size** 0.25
 
             elif distance_type == "cosine":
                 hidden_states = F.normalize(hidden_states, p=2, dim=-1)

@@ -35,7 +35,7 @@ from src.defaults import (
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
 from src.datastore import DataStore
-from src.evaluation import evaluate_translation_model
+from src.evaluation import evaluate_translation_model, evaluate_generation_model
 from src.utils import shard_model
 
 
@@ -191,7 +191,7 @@ def evaluate_generations(
         generation_config["logits_processor"] = [logit_processor]
 
     # Generate translations according to specified method
-    translations = [[] for _ in range(num_samples)]
+    generations = [[] for _ in range(num_samples)]
 
     for batch in tqdm(data_loader, total=len(data_loader)):
         for n in range(num_samples):
@@ -206,7 +206,7 @@ def evaluate_generations(
                 outputs = outputs.sequences
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            translations[n] += outputs
+            generations[n] += outputs
 
     # Generate results
     if task == "mt":
@@ -215,10 +215,17 @@ def evaluate_generations(
         source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
         reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
 
-    partial_results = [
-        evaluate_translation_model(translations[n], source_file, reference_file, metrics=evaluation_metrics)
-        for n in range(num_samples)
-    ]
+        partial_results = [
+            evaluate_translation_model(generations[n], source_file, reference_file, metrics=evaluation_metrics)
+            for n in range(num_samples)
+        ]
+
+    elif task == "lm":
+        reference_file = f"{data_dir}/{dataset}/references.txt"
+        partial_results = [
+            evaluate_generation_model(generations[n], reference_file, metrics=evaluation_metrics)
+            for n in range(num_samples)
+        ]
 
     if num_samples == 1:
         results = partial_results[0]
