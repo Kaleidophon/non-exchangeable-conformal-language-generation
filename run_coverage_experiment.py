@@ -401,11 +401,6 @@ if __name__ == "__main__":
             token=TELEGRAM_API_TOKEN, chat_id=TELEGRAM_CHAT_ID
         )(run_experiments)
 
-    # Define paths for translation data based on dataset chosen
-    src_lang, tgt_lang = args.dataset[:2], args.dataset[2:]
-    source_path = os.path.join(args.data_dir, args.dataset, f"dev.{SUFFIX[src_lang]}")
-    references_path = os.path.join(args.data_dir, args.dataset, f"dev.{SUFFIX[tgt_lang]}")
-
     try:
         # Run experiments
         run_experiments(
