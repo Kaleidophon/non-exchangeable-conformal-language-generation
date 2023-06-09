@@ -216,6 +216,9 @@ def run_experiments(
             elif distance_type == "cosine":
                 hidden_states = F.normalize(hidden_states, p=2, dim=-1)
 
+            if len(hidden_states) == 0:
+                continue
+
             predictions = predictions[mask]
             labels = labels[mask]
 
