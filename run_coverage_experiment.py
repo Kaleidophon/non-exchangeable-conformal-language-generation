@@ -189,9 +189,7 @@ def run_experiments(
                 outputs = model.forward(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
-                    output_hidden_states=True,
-                    decoder_input_ids=decoder_input_ids,
-                    return_dict=True,
+                    **forward_kwargs
                 )
 
             if isinstance(model, M2M100PreTrainedModel):
@@ -213,7 +211,7 @@ def run_experiments(
             hidden_states = hidden_states[mask]
 
             if distance_type == "inner_product":
-                 hidden_states /= model_hidden_size** 0.25
+                 hidden_states /= model_hidden_size ** 0.25
 
             elif distance_type == "cosine":
                 hidden_states = F.normalize(hidden_states, p=2, dim=-1)
