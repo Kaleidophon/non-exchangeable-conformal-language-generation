@@ -174,7 +174,7 @@ def find_temperature(
                 }
 
                 if isinstance(model, M2M100PreTrainedModel):
-                    forward_kwargs["decoder_inputs_ids"] = decoder_input_ids
+                    forward_kwargs["decoder_input_ids"] = decoder_input_ids
 
                 # Generate outputs
                 with torch.no_grad():

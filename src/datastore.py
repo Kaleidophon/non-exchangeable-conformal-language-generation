@@ -286,7 +286,7 @@ def build_calibration_data(
         }
 
         if isinstance(model, M2M100PreTrainedModel):
-            forward_kwargs["decoder_inputs_ids"] = decoder_input_ids
+            forward_kwargs["decoder_input_ids"] = decoder_input_ids
 
         # Generate hypotheses
         with torch.no_grad():
