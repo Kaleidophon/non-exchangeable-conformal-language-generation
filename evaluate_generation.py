@@ -113,7 +113,8 @@ def evaluate_generations(
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
         truncation=True,
-        load_splits=("test",)
+        load_splits=("test",),
+        use_ravfogel_prompt=(task == "lm")
     )["test"]
 
     if softmax_temperature is None:
