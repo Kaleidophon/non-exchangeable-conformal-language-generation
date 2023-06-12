@@ -68,6 +68,11 @@ class TextDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
+
+        if self.ravfogel_prompt:
+            self.tokenizer.padding_side = "left"
+            self.tokenizer_kwargs["max_length"] = 35
+
         tokenized = self.tokenizer(self.data[idx], return_tensors="pt", **self.tokenizer_kwargs)
 
         if not self.ravfogel_prompt:
@@ -80,11 +85,9 @@ class TextDataset(Dataset):
 
         # Use the prompt style by Ravfogel et al. (2023): 35 initial tokens followed by generation
         else:
-            self.tokenizer.padding_side = "left"
-
             data = {
-                "input_ids": tokenized["input_ids"].squeeze(0)[:35].to(self.device),
-                "attention_mask": tokenized["attention_mask"][:35].squeeze(0).to(self.device),
+                "input_ids": tokenized["input_ids"].squeeze(0).to(self.device),
+                "attention_mask": tokenized["attention_mask"].squeeze(0).to(self.device),
             }
 
         return data
