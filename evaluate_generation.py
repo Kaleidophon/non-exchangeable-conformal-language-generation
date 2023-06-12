@@ -124,12 +124,18 @@ def evaluate_generations(
 
     generation_config = {
         "max_length": model.config.max_length,
-        "early_stopping": True,
-        "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang),
         "do_sample": True,
         "num_beams": 1,
         "temperature": softmax_temperature,
     }
+
+    if task == "mt":
+        generation_config["forced_bos_token_id"] = tokenizer.get_lang_id(tgt_lang)
+        generation_config["num_beams"] = 1
+        generation_config["early_stopping"] = 1
+
+    else:
+        generation_config["early_stopping"] = 200
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":

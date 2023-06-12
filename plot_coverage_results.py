@@ -48,7 +48,7 @@ def plot_coverage_results(
 
         # Parse parameters from file name
         neighbors, temperature, alpha, distance = re.compile(
-            r".+?/\d{2}-\d{2}-\d{4}_\(\d{2}:\d{2}:\d{2}\)_\w{4}_\w+?_(\d+)_(\d+\.\d+)_(\d\.\d+)(_.+)?\.pkl"
+            r".+?/\d{2}-\d{2}-\d{4}_\(\d{2}:\d{2}:\d{2}\)_\w+?_\w+?_(\d+)_(\d+\.\d+)_(\d\.\d+)(_.+)?\.pkl"
         ).match(result_file).groups()
 
         key_map = {
