@@ -163,6 +163,9 @@ def load_data(
             data_loaders["dev"] = dev_dl
 
         if "test" in load_splits:
+            if use_ravfogel_prompt:
+                tokenizer_kwargs["padding_side"] = "left"
+
             test_dataset = TextDataset(
                 data_split[-10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
