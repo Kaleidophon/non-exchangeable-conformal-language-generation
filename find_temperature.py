@@ -22,7 +22,8 @@ import wandb
 from src.data import load_data
 from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
-    STEP_SIZE, SEARCH_SPACE, NUM_BATCHES, TEMPERATURE, ALPHA, NUM_ATTEMPTS, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS
+    STEP_SIZE, SEARCH_SPACE, NUM_BATCHES, TEMPERATURE, ALPHA, NUM_ATTEMPTS, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS,
+    MODEL_HIDDEN_SIZES
 )
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device
@@ -123,11 +124,7 @@ def find_temperature(
     )
     data_loader = data_loaders["dev"]
 
-    try:
-        model_hidden_size = model.config.d_model
-
-    except:
-        model_hidden_size = int(model.config.hidden_size / 2)
+    model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
     # Load calibration data
     data_store = DataStore(

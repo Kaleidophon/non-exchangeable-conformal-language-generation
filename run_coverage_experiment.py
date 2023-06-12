@@ -20,10 +20,10 @@ from tqdm import tqdm
 import wandb
 
 # PROJECT
-from src.data import load_data, SUFFIX
+from src.data import load_data
 from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
-    ALPHA, TEMPERATURE, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS
+    ALPHA, TEMPERATURE, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS, MODEL_HIDDEN_SIZES
 )
 from src.conformal import ConformalCalibrator
 from src.custom_types import Device, WandBRun
@@ -131,12 +131,7 @@ def run_experiments(
         truncation=True
     )
     data_loader = data_loaders["test"]
-
-    try:
-        model_hidden_size = model.config.d_model
-
-    except:
-        model_hidden_size = int(model.config.hidden_size / 2)
+    model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
     # Load calibration data
     data_store = DataStore(

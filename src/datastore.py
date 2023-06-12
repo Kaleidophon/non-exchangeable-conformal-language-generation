@@ -21,6 +21,7 @@ from transformers import PreTrainedModel, M2M100PreTrainedModel
 # PROJECT
 from src.conformal import simple_conformity_scores, adaptive_conformity_score
 from src.custom_types import Device
+from src.defaults import MODEL_HIDDEN_SIZES
 
 # CONST
 RAW_FEATURE_KEY_SUFFIX = ".pt"
@@ -258,11 +259,7 @@ def build_calibration_data(
     assert conformity_score in ("simple", "adaptive"), f"Conformity score must be 'simple' or 'adaptive', but " \
                                                        f"'{conformity_score}' found."
 
-    try:
-        model_hidden_size = model.config.d_model
-
-    except:
-        model_hidden_size = int(model.config.hidden_size / 2)
+    model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
     calibration_data = DataStore(
         key_dim=model_hidden_size, value_dim=1, distance_type=distance_type, device=device, **datastore_kwargs
