@@ -66,7 +66,7 @@ def evaluate_translation_model(
 def evaluate_generation_model(
     generations: List[str],
     reference_file: str,
-    metrics: Tuple[str] = ("mauve", "bleurt")
+    metrics: Tuple[str] = ("mauve", "bleurt", "bert_score")
 ):
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
@@ -85,8 +85,12 @@ def evaluate_generation_model(
         bleurt_results = bleurt.compute(predictions=generations, references=reference_generations)
         result_dict["bleurt"] = np.mean(bleurt_results["scores"])
 
-    return result_dict
+    if "bert_score" in metrics:
+        bertscore = evaluate.load("bertscore")
+        bertscore_results = bertscore.compute(predictions=generations, references=reference_generations)
+        result_dict["bert_score"] = bertscore_results["f1"].mean()
 
+    return result_dict
 
 
 def evaluate_comet(
