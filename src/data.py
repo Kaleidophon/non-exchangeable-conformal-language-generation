@@ -80,6 +80,8 @@ class TextDataset(Dataset):
 
         # Use the prompt style by Ravfogel et al. (2023): 35 initial tokens followed by generation
         else:
+            self.tokenizer.padding_side = "left"
+
             data = {
                 "input_ids": tokenized["input_ids"].squeeze(0)[:35].to(self.device),
                 "attention_mask": tokenized["attention_mask"][:35].squeeze(0).to(self.device),
@@ -163,9 +165,6 @@ def load_data(
             data_loaders["dev"] = dev_dl
 
         if "test" in load_splits:
-            if use_ravfogel_prompt:
-                tokenizer_kwargs["padding_side"] = "left"
-
             test_dataset = TextDataset(
                 data_split[-10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
