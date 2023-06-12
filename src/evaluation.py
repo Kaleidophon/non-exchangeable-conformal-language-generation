@@ -63,6 +63,7 @@ def evaluate_translation_model(
 
     return result_dict
 
+
 def evaluate_generation_model(
     generations: List[str],
     reference_file: str,
