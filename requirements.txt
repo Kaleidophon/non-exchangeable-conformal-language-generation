@@ -1,4 +1,4 @@
-datasets
+datasets==2.10.0
 numpy==1.23.5
 protobuf==3.20
 codecarbon
@@ -15,4 +15,5 @@ unbabel-comet
 accelerate
 scikit-learn
 mauve-text
+git+https://github.com/google-research/bleurt.git
 

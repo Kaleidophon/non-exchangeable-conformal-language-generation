@@ -62,7 +62,7 @@ def create_datastore(
 
     if task == "mt":
         src_lang, tgt_lang = DATASETS[dataset]
-        tokenizer = model_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
+        tokenizer = tokenizer_class.from_pretrained(model_identifier, src_lang=src_lang, tgt_lang=tgt_lang)
 
     else:
         tokenizer = tokenizer_class.from_pretrained(model_identifier)
