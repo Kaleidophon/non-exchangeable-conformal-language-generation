@@ -169,9 +169,6 @@ def load_data(
 
         if "test" in load_splits:
 
-            data_split = codecs.open(
-                f"{data_dir}/{dataset_name}/openwebtext_{dataset_name}.txt", "r", "utf-8"
-            ).readlines()
             test_dataset = TextDataset(
                 data_split, tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
