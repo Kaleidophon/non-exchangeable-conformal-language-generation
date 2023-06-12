@@ -161,16 +161,21 @@ def load_data(
         data_split = codecs.open(f"{data_dir}/{dataset_name}/{dataset_name}.txt", "r", "utf-8").readlines()
 
         if "dev" in load_splits:
-            dev_dataset = TextDataset(data_split[:10000], tokenizer, device, **tokenizer_kwargs)
+            dev_dataset = TextDataset(data_split, tokenizer, device, **tokenizer_kwargs)
             dev_dl = DataLoader(
                 dev_dataset, batch_size=batch_size
             )
             data_loaders["dev"] = dev_dl
 
         if "test" in load_splits:
+
+            data_split = codecs.open(
+                f"{data_dir}/{dataset_name}/openwebtext_{dataset_name}.txt", "r", "utf-8"
+            ).readlines()
             test_dataset = TextDataset(
-                data_split[-10000:], tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
+                data_split, tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
+
             test_dl = DataLoader(
                 test_dataset, batch_size=batch_size
             )
