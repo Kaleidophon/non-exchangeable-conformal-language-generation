@@ -271,7 +271,7 @@ class ConformalLogitProcessor(LogitsProcessor):
         entropy_values = data_store.value_tensor.to(self.calibrator.device)
         self.bin_boundaries = torch.linspace(
             torch.min(entropy_values).item(), torch.max(entropy_values).item(), self.num_bins
-        )
+        ).to(self.calibrator.device)
         bins = [[] for _ in range(self.num_bins)]
 
         for entropy, conformity in zip(entropy_values, conformity_scores):
