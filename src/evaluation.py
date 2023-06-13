@@ -78,7 +78,7 @@ def evaluate_generation_model(
 
     if "mauve" in metrics:
         mauve = evaluate.load("mauve")
-        mauve_results = mauve.compute(predictions=generations, references=reference_generations)
+        mauve_results = mauve.compute(predictions=generations, references=reference_generations, featurize_model_name="gpt2")
         result_dict["mauve"] = mauve_results.mauve
 
     if "bleurt" in metrics:

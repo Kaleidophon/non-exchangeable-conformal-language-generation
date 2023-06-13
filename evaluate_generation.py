@@ -291,7 +291,7 @@ if __name__ == "__main__":
         nargs='+',
         type=str,
         default=("bleu", "chrf", "comet"),
-        choices=("bleu", "chrf", "comet", "mauve", "bleurt", "bertscore")
+        choices=("bleu", "chrf", "comet", "mauve", "bleurt", "bert_score")
     )
     parser.add_argument(
         "--batch-size",
