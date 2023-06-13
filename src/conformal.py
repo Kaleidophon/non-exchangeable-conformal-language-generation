@@ -269,7 +269,9 @@ class ConformalLogitProcessor(LogitsProcessor):
         # Bin conformity stores by entropy and get the corresponding q_hat
         conformity_scores = data_store.value_tensor
         entropy_values = data_store.value_tensor
-        self.bin_boundaries = torch.linspace(torch.min(entropy_values)[0], torch.max(entropy_values)[0], self.num_bins)
+        self.bin_boundaries = torch.linspace(
+            torch.min(entropy_values)[0].item(), torch.max(entropy_values)[0].item(), self.num_bins
+        )
         bins = [[] for _ in range(self.num_bins)]
 
         for entropy, conformity in zip(entropy_values, conformity_scores):
