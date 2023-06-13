@@ -80,16 +80,19 @@ def evaluate_generation_model(
         mauve = evaluate.load("mauve")
         mauve_results = mauve.compute(predictions=generations, references=reference_generations, featurize_model_name="gpt2")
         result_dict["mauve"] = mauve_results.mauve
+        del mauve
 
     if "bleurt" in metrics:
         bleurt = evaluate.load("bleurt", module_type="metric", checkpoint="bleurt-tiny-128")
         bleurt_results = bleurt.compute(predictions=generations, references=reference_generations)
         result_dict["bleurt"] = np.mean(bleurt_results["scores"])
+        del bleurt
 
     if "bert_score" in metrics:
         bertscore = evaluate.load("bertscore", lang="en")
         bertscore_results = bertscore.compute(predictions=generations, references=reference_generations, lang="en ")
         result_dict["bert_score"] = np.mean(bertscore_results["f1"])
+        del bertscore
 
     return result_dict
 
