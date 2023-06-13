@@ -8,7 +8,7 @@ from typing import Tuple
 
 # EXT
 import numpy as np
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, M2M100PreTrainedModel
 from transformers.generation import LogitsProcessor
 import torch
 import torch.nn.functional as F
@@ -345,7 +345,11 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
         Patch the model forward pass to save the decoder hidden encodings.
         """
         def hook_fn(model, inputs, outputs):
-            self.last_decoder_encodings = outputs.decoder_hidden_states[-1].squeeze(1)
+            if isinstance(model, M2M100PreTrainedModel):
+                self.last_decoder_encodings = outputs.decoder_hidden_states[-1].squeeze(1)
+
+            else:
+                self.last_decoder_encodings = outputs.hidden_states[-1].squeeze(1)
 
             if self.distance_type == "inner_product":
                 self.last_decoder_encodings /= model.config.d_model ** 0.25
