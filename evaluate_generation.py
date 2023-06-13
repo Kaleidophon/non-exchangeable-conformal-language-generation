@@ -215,6 +215,9 @@ def evaluate_generations(
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             generations[n] += outputs
 
+    del data_loader  # Delete data loader to free up memory
+    del model  # Delete model to free up memory
+
     # Generate results
     if task == "mt":
         src_abbr = src_lang[:2]
