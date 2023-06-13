@@ -284,7 +284,9 @@ class ConformalLogitProcessor(LogitsProcessor):
         for bin in bins:
             N = len(bin)
             q_level = np.ceil((N + 1) * (1 - alpha)) / N
-            q_hat = torch.FloatTensor([np.quantile(conformity_scores, q_level, method='higher')])
+            q_hat = torch.FloatTensor(
+                [np.quantile(bin, q_level, method='higher')]
+            ).to(self.calibrator.device)
             self.q_hats.append(q_hat)
 
     def get_q_hats(self, scores: torch.FloatTensor):
