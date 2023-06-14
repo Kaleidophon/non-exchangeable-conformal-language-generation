@@ -349,7 +349,7 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
                 self.last_decoder_encodings = outputs.decoder_hidden_states[-1].squeeze(1)
 
             else:
-                self.last_decoder_encodings = outputs.hidden_states[-1].squeeze(1)
+                self.last_decoder_encodings = outputs.hidden_states[-1][:, -1, :]
 
             if self.distance_type == "inner_product":
                 self.last_decoder_encodings /= model.config.d_model ** 0.25
