@@ -85,7 +85,7 @@ def evaluate_generation_model(
         mauve = evaluate.load("mauve")
         mauve_results = mauve.compute(
             predictions=generations, references=reference_generations, featurize_model_name="gpt2",
-            device_id=device.split(":")[-1] if device is not None else None,
+            device_id=int(device.split(":")[-1]) if device is not None else None,
         )
         result_dict["mauve"] = mauve_results.mauve
         del mauve
