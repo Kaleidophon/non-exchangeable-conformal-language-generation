@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 from typing import Dict, List, Tuple
+import random
 
 # EXT
 import numpy as np
@@ -117,18 +118,20 @@ def evaluate_comet(
     use_gpu: bool
         Indicate whether GPU is available for faster eval.
     """
+    rnd = random.randint(0, 100000)  # Add random number to avoid collisions
+
     # Create temp files
-    with codecs.open("translations.tmp", "w", "utf-8") as f:
+    with codecs.open(f"translations_{rnd}.tmp", "w", "utf-8") as f:
         f.write("\n".join(translations))
 
-    with codecs.open("sources.tmp", "w", "utf-8") as f:
+    with codecs.open(f"sources_{rnd}.tmp", "w", "utf-8") as f:
         f.write("\n".join(sources))
 
-    with codecs.open("references.tmp", "w", "utf-8") as f:
+    with codecs.open(f"references_{rnd}.tmp", "w", "utf-8") as f:
         f.write("\n".join(references))
 
     # TODO: Keep for now in case we need to use it for CometKiwi
-    comet_command = f"comet-score -s sources.tmp -t translations.tmp -r references.tmp"
+    comet_command = f"comet-score -s sources_{rnd}.tmp -t translations_{rnd}.tmp -r references_{rnd}.tmp"
 
     if not use_gpu:
         comet_command += " --gpus 0"
@@ -141,12 +144,13 @@ def evaluate_comet(
         raise RuntimeError(error)
 
     # Catch final score in output
+    print(output)  # TODO: Debug
     score = re.search(r"score: (\d+.\d+)", str(output)).group(1)
     score = float(score)
 
     # Remove temp files
-    os.remove("translations.tmp")
-    os.remove("sources.tmp")
-    os.remove("references.tmp")
+    os.remove(f"translations_{rnd}.tmp")
+    os.remove(f"sources_{rnd}.tmp")
+    os.remove(f"references_{rnd}.tmp")
 
     return score

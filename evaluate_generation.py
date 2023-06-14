@@ -258,6 +258,9 @@ def evaluate_generations(
 
     # Save results to path
     result_path = f"{result_dir}/{timestamp}_{model_identifier.replace('/', '_')}_{generation_method}_results.txt"
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+
     with open(result_path, "w") as results_file:
         results_file.write(json.dumps(results))
 
