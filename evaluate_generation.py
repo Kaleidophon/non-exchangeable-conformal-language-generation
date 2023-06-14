@@ -236,7 +236,7 @@ def evaluate_generations(
     elif task == "lm":
         reference_file = f"{data_dir}/{dataset}/references.txt"
         partial_results = [
-            evaluate_generation_model(generations[n], reference_file, metrics=evaluation_metrics)
+            evaluate_generation_model(generations[n], reference_file, metrics=evaluation_metrics, device=device)
             for n in range(num_samples)
         ]
 

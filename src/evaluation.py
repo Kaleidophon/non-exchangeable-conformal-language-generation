@@ -7,12 +7,15 @@ import codecs
 import os
 import re
 import subprocess
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import random
 
 # EXT
 import numpy as np
 import evaluate
+
+# PROJECT
+from src.custom_types import Device
 
 
 def evaluate_translation_model(
@@ -68,7 +71,8 @@ def evaluate_translation_model(
 def evaluate_generation_model(
     generations: List[str],
     reference_file: str,
-    metrics: Tuple[str] = ("mauve", "bleurt", "bert_score")
+    metrics: Tuple[str] = ("mauve", "bleurt", "bert_score"),
+    device: Optional[Device] = None
 ):
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
@@ -79,7 +83,10 @@ def evaluate_generation_model(
 
     if "mauve" in metrics:
         mauve = evaluate.load("mauve")
-        mauve_results = mauve.compute(predictions=generations, references=reference_generations, featurize_model_name="gpt2")
+        mauve_results = mauve.compute(
+            predictions=generations, references=reference_generations, featurize_model_name="gpt2",
+            device_id=device.split(":")[-1] if device is not None else None,
+        )
         result_dict["mauve"] = mauve_results.mauve
         del mauve
 
@@ -92,7 +99,8 @@ def evaluate_generation_model(
     if "bert_score" in metrics:
         bertscore = evaluate.load("bertscore", lang="en")
         bertscore_results = bertscore.compute(
-            predictions=generations, references=reference_generations, lang="en", model_type="distilbert-base-uncased"
+            predictions=generations, references=reference_generations, lang="en", model_type="distilbert-base-uncased",
+            device=device
         )
         result_dict["bert_score"] = np.mean(bertscore_results["f1"])
         del bertscore
