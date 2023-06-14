@@ -23,7 +23,7 @@ from codecarbon import OfflineEmissionsTracker
 import numpy as np
 import torch
 from tqdm import tqdm
-from transformers.generation import SampleEncoderDecoderOutput
+from transformers.generation import SampleEncoderDecoderOutput, SampleDecoderOnlyOutput
 
 # PROJECT
 from src.data import load_data, SUFFIX
@@ -209,7 +209,7 @@ def evaluate_generations(
             )
 
             # For the non-exchangeable conformal sampling
-            if isinstance(outputs, SampleEncoderDecoderOutput):
+            if isinstance(outputs, SampleEncoderDecoderOutput) or isinstance(outputs, SampleDecoderOnlyOutput):
                 outputs = outputs.sequences
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
