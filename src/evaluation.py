@@ -91,7 +91,9 @@ def evaluate_generation_model(
 
     if "bert_score" in metrics:
         bertscore = evaluate.load("bertscore", lang="en")
-        bertscore_results = bertscore.compute(predictions=generations, references=reference_generations, lang="en ")
+        bertscore_results = bertscore.compute(
+            predictions=generations, references=reference_generations, lang="en", model_type="distilbert-base-uncased"
+        )
         result_dict["bert_score"] = np.mean(bertscore_results["f1"])
         del bertscore
 

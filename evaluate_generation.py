@@ -218,6 +218,9 @@ def evaluate_generations(
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
 
+    if data_store is not None:
+        del data_store  # Delete data store to free up memory
+
     # Generate results
     if task == "mt":
         src_abbr = src_lang[:2]
