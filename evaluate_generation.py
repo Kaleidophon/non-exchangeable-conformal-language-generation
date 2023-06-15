@@ -11,6 +11,7 @@ In this case, we test the following methods:
 
 # STD
 import argparse
+import codecs
 from collections import defaultdict
 from datetime import datetime
 import json
@@ -224,12 +225,12 @@ def evaluate_generations(
         src_abbr = src_lang[:2]
         tgt_abbr = tgt_lang[:2]
         source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
-        reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
+        reference_path = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
 
         if use_mbr:
             partial_results = [
                 evaluate_translation_model(
-                    generations, source_file, reference_file, use_mbr=use_mbr, metrics=evaluation_metrics,
+                    generations, source_file, reference_path, use_mbr=use_mbr, metrics=evaluation_metrics,
                     device=device
                 )
             ]
@@ -237,15 +238,15 @@ def evaluate_generations(
         else:
             partial_results = [
                 evaluate_translation_model(
-                    generations[n], source_file, reference_file, use_mbr=use_mbr, metrics=evaluation_metrics
+                    generations[n], source_file, reference_path, use_mbr=use_mbr, metrics=evaluation_metrics
                 )
                 for n in range(num_samples)
             ]
 
     elif task == "lm":
-        reference_file = f"{data_dir}/{dataset}/references.txt"
+        reference_path = f"{data_dir}/{dataset}/references.txt"
         partial_results = [
-            evaluate_generation_model(generations[n], reference_file, metrics=evaluation_metrics, device=device)
+            evaluate_generation_model(generations[n], reference_path, metrics=evaluation_metrics, device=device)
             for n in range(num_samples)
         ]
 
@@ -280,10 +281,15 @@ def evaluate_generations(
     num_generations = len(generations[0])
     generations_path = f"{result_dir}/{timestamp}_{model_identifier.replace('/', '_')}_{generation_method}_generations.txt"
 
-    with open(generations_path, "w") as generations_file:
+    with codecs.open(reference_path, "r", "utf-8") as reference_file:
+        reference_lines = reference_file.readlines()
+
+    with codecs.open(generations_path, "w", "utf-8") as generations_file:
         for i in range(num_generations):
+            generations_file.write("Reference:\t" + reference_lines[i])
+
             for n in range(num_samples):
-                generations_file.write(f"{generations[n][i]}\n")
+                generations_file.write(f"Generation {n+1}:\t{generations[n][i]}\n")
 
             generations_file.write("\n")
 
