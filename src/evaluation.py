@@ -58,8 +58,8 @@ def evaluate_translation_model(
         num_translations = len(translations[0])
 
         with codecs.open(f"mbr_{rnd}.txt", "w", "utf-8") as f:
-            for sample in range(num_samples):
-                for translation in range(num_translations):
+            for translation in range(num_translations):
+                for sample in range(num_samples):
                     f.write(f"{translations[sample][translation]}\n")
 
         # Run COMET MBR script
