@@ -69,11 +69,13 @@ class TextDataset(Dataset):
 
     def __getitem__(self, idx):
 
+        data = self.data[idx]
+
         if self.ravfogel_prompt:
             self.tokenizer.padding_side = "left"
-            self.tokenizer_kwargs["max_length"] = 35
+            data = " ".join(data.split(" ")[:35])  # Limit to the first 35 tokens
 
-        tokenized = self.tokenizer(self.data[idx], return_tensors="pt", **self.tokenizer_kwargs)
+        tokenized = self.tokenizer(data, return_tensors="pt", **self.tokenizer_kwargs)
 
         if not self.ravfogel_prompt:
             data = {
