@@ -64,6 +64,7 @@ def evaluate_generations(
     temperature: float,
     data_dir: str,
     result_dir: str,
+    use_mbr: bool,
     evaluation_metrics: Tuple[str, ...] = ("bleu", "chrf", "comet"),
     # Arguments for common sampling methods
     num_beams: Optional[int] = None,
@@ -215,6 +216,8 @@ def evaluate_generations(
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             generations[n] += outputs
 
+        break  # TODO: Debug
+
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
 
@@ -225,10 +228,21 @@ def evaluate_generations(
         source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
         reference_file = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
 
-        partial_results = [
-            evaluate_translation_model(generations[n], source_file, reference_file, metrics=evaluation_metrics)
-            for n in range(num_samples)
-        ]
+        if use_mbr:
+            partial_results = [
+                evaluate_translation_model(
+                    generations, source_file, reference_file, use_mbr=use_mbr, metrics=evaluation_metrics,
+                    device=device
+                )
+            ]
+
+        else:
+            partial_results = [
+                evaluate_translation_model(
+                    generations[n], source_file, reference_file, use_mbr=use_mbr, metrics=evaluation_metrics
+                )
+                for n in range(num_samples)
+            ]
 
     elif task == "lm":
         reference_file = f"{data_dir}/{dataset}/references.txt"
@@ -298,6 +312,11 @@ if __name__ == "__main__":
         type=str,
         default=("bleu", "chrf", "comet"),
         choices=("bleu", "chrf", "comet", "mauve", "bleurt", "bert_score")
+    )
+    parser.add_argument(
+        "--use-mbr",
+        action="store_true",
+        default=False
     )
     parser.add_argument(
         "--batch-size",
@@ -434,6 +453,7 @@ if __name__ == "__main__":
             temperature=args.temperature,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
+            use_mbr=args.use_mbr,
             evaluation_metrics=args.evaluation_metrics,
             num_beams=args.num_beams,
             num_samples=args.num_samples,

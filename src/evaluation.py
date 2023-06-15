@@ -7,7 +7,7 @@ import codecs
 import os
 import re
 import subprocess
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 import random
 
 # EXT
@@ -19,10 +19,12 @@ from src.custom_types import Device
 
 
 def evaluate_translation_model(
-    translations: List[str],
+    translations: Union[List[str], List[List[str]]],
     source_file: str,
     reference_file: str,
+    use_mbr: bool,
     metrics: Tuple[str] = ("bleu", "chrf", "comet"),
+    device: Optional[Device] = None
 ) -> Dict[str, float]:
     """
     Evaluate a model on the test set.
@@ -47,6 +49,39 @@ def evaluate_translation_model(
     # Load reference translations
     with codecs.open(reference_file, "r", "utf-8") as f:
         reference_translations = [line.strip() for line in f.readlines()]
+
+    # Use minimum Bayes risk decoding - we write all samples for a source into a file, use COMET to score them and
+    # the select the best scoring one
+    if use_mbr:
+        rnd = random.randint(0, 100000)  # Add random number to avoid collisions
+        num_samples = len(translations)
+        num_translations = len(translations[0])
+
+        with codecs.open(f"mbr_{rnd}.txt", "w", "utf-8") as f:
+            for sample in range(num_samples):
+                for translation in range(num_translations):
+                    f.write(f"{translations[sample][translation]}\n")
+
+        # Run COMET MBR script
+        num_samples = len(translations)
+        comet_command = f"comet-mbr -s {source_file} -t mbr_{rnd}.txt --num_sample {num_samples} -o mbr_out_{rnd}.txt"
+
+        if device is not None:
+            comet_command += f" --gpus {device.split(':')[-1]}"
+
+        process = subprocess.Popen(comet_command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
+
+        # Propagate error (if one occured)
+        if error is not None:
+            raise RuntimeError(error)
+
+        # Load best translations
+        with codecs.open(f"mbr_out_{rnd}.txt", "r", "utf-8") as f:
+            translations = [line.strip() for line in f.readlines()]
+
+        # Remove temporary files
+        os.remove(f"mbr_{rnd}.txt")
 
     # Evaluate translations
     result_dict = {}
