@@ -216,8 +216,6 @@ def evaluate_generations(
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             generations[n] += outputs
 
-        break  # TODO: Debug
-
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
 
