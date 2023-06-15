@@ -276,6 +276,17 @@ def evaluate_generations(
     with open(result_path, "w") as results_file:
         results_file.write(json.dumps(results))
 
+    # Write generations to file
+    num_generations = len(generations[0])
+    generations_path = f"{result_dir}/{timestamp}_{model_identifier.replace('/', '_')}_{generation_method}_generations.txt"
+
+    with open(generations_path, "w") as generations_file:
+        for i in range(num_generations):
+            for n in range(num_samples):
+                generations_file.write(f"{generations[n][i]}\n")
+
+            generations_file.write("\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
