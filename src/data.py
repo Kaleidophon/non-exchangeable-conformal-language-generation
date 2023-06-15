@@ -73,7 +73,7 @@ class TextDataset(Dataset):
 
         if self.ravfogel_prompt:
             self.tokenizer.padding_side = "left"
-            data = " ".join(data.split(" ")[:35])  # Limit to the first 35 tokens
+            data = " ".join(data.split(" ")[:35])  # Limit to the first 35 words
 
         tokenized = self.tokenizer(data, return_tensors="pt", **self.tokenizer_kwargs)
 
