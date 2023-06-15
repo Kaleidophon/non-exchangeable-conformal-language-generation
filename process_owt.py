@@ -9,6 +9,7 @@ DATA_PATH = "./data/openwebtext/openwebtext.txt"
 OUTPUT_PATHS = ("./data/openwebtext/test.txt", "./data/openwebtext/references.txt")
 NUM_PROMPTS = 1000
 MIN_LENGTH = 50
+MAX_LENGTH = 200
 
 if __name__ == "__main__":
     with codecs.open(DATA_PATH, "r", "utf-8") as f:
@@ -16,7 +17,7 @@ if __name__ == "__main__":
             num_lines = 0
 
             for line in f.readlines():
-                if len(line.split(" ")) < MIN_LENGTH:
+                if len(line.split(" ")) < MIN_LENGTH or len(line.split(" ")) < 200:
                     continue
 
                 out_file1.write(line)
