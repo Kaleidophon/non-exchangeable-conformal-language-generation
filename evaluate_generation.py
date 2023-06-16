@@ -138,8 +138,8 @@ def evaluate_generations(
         generation_config["num_beams"] = 1
 
     # That is actually not how Ravfogel et al. generate
-    #else:
-    #    generation_config["max_length"] = 200
+    else:
+        generation_config["max_length"] = 500
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
@@ -217,7 +217,7 @@ def evaluate_generations(
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-            # Truncate to 200 tokens for language modeling
+            # Truncate to 200 tokens for language modeling (Ravfogel et al. setup)
             if task == "lm":
                 outputs = [" ".join(out.split()[:200]) for out in outputs]
 
