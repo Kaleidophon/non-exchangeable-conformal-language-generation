@@ -139,7 +139,8 @@ def evaluate_generations(
 
     # That is actually not how Ravfogel et al. generate
     else:
-        generation_config["max_length"] = 500
+        del generation_config["max_length"]
+        generation_config["max_new_tokens"] = 200
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
