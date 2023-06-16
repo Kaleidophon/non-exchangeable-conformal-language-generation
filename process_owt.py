@@ -5,7 +5,7 @@ Quick and dirty script to create evaluation data based on openwebtext.
 # STD
 import codecs
 
-DATA_PATH = "./data/openwebtext/openwebtext.txt"
+DATA_PATH = "./data/openwebtext/openwebtext2.txt"
 OUTPUT_PATHS = ("./data/openwebtext/test.txt", "./data/openwebtext/references.txt")
 NUM_PROMPTS = 1000
 MIN_LENGTH = 50
@@ -17,8 +17,14 @@ if __name__ == "__main__":
             num_lines = 0
 
             for line in f.readlines():
-                if len(line.split(" ")) < MIN_LENGTH or len(line.split(" ")) < 200:
+                line = line.replace("\n", "")
+                line += "\n"
+
+                if line.strip() == "":
                     continue
+
+                #if len(line.split(" ")) < MIN_LENGTH or len(line.split(" ")) < 200:
+                #    continue
 
                 out_file1.write(line)
                 out_file2.write(line)
