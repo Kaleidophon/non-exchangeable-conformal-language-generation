@@ -111,7 +111,7 @@ def evaluate_generation_model(
 ):
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
-        reference_generations = [line.strip() for line in f.readlines()]
+        reference_generations = [" ".join(line.strip().split(" ")[:200]) for line in f.readlines()]
 
     # Evaluate translations
     result_dict = {}

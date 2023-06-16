@@ -218,7 +218,7 @@ def evaluate_generations(
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-            # Truncate to 200 tokens for language modeling (Ravfogel et al. setup)
+            # Truncate to 200 words for language modeling (Ravfogel et al. setup)
             if task == "lm":
                 outputs = [" ".join(out.split()[:200]) for out in outputs]
 
