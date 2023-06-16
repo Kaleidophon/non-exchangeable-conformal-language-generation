@@ -137,8 +137,9 @@ def evaluate_generations(
         generation_config["forced_bos_token_id"] = tokenizer.get_lang_id(tgt_lang)
         generation_config["num_beams"] = 1
 
-    else:
-        generation_config["max_length"] = 200
+    # That is actually not how Ravfogel et al. generate
+    #else:
+    #    generation_config["max_length"] = 200
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
@@ -215,6 +216,11 @@ def evaluate_generations(
                 outputs = outputs.sequences
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+            # Truncate to 200 tokens for language modeling
+            if task == "lm":
+                outputs = [" ".join(out.split()[:200]) for out in outputs]
+
             generations[n] += outputs
 
     del data_loader  # Delete data loader to free up memory
