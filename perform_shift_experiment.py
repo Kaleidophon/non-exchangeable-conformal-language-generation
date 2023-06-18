@@ -90,14 +90,14 @@ def perform_hallucinations_experiment(
     else:
         tokenizer = tokenizer_class.from_pretrained(model_identifier)
 
-    data_loaders = load_data(
+    data_loader = load_data(
         dataset, tokenizer, batch_size, device, data_dir,
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
         truncation=True,
         use_ravfogel_prompt=True,
-        load_splits=("dev", "test")
-    )
+        load_splits=("test",)
+    )["test"]
 
     generation_config = {
         "max_length": model.config.max_length,
@@ -125,88 +125,74 @@ def perform_hallucinations_experiment(
     generation_config["logits_processor"] = [logit_processor]
 
     # Record set sizes for generations and hallucinations on the validation set
-    hallucination_mask = torch.zeros(model.config.decoder_layers, model.config.decoder_attention_heads)
     normal_set_sizes = defaultdict(list)
     hallucination_set_sizes = defaultdict(list)
 
-    for split in ("dev", "test"):
-        for batch in tqdm(data_loaders[split], total=len(data_loaders[split])):
+    noises = [
+        None, (0, 1), (0, 2.5), (0, 5)
+    ]
 
-            generate_outputs = model.generate(
+    for batch in tqdm(data_loader, total=len(data_loader)):
+
+        with torch.no_grad():
+            forward_outputs = model.forward(
                 input_ids=batch["input_ids"],
                 attention_mask=batch["attention_mask"],
-                **generation_config
+                decoder_input_ids=batch["decoder_input_ids"],
+                output_hidden_states=True,
+                return_dict=True
             )
-            batch_normal_sizes = logit_processor.last_set_sizes
-            batch_normal_sizes = [torch.LongTensor(sizes) for sizes in batch_normal_sizes]
-            batch_normal_sizes = torch.stack(batch_normal_sizes, dim=1)
-            logit_processor.last_set_sizes = []
 
-            # Feed in the same tokens, but restrict attention on the source side
-            decoder_token_ids = generate_outputs.sequences
+        decoder_token_ids_wo_bos_eos = decoder_token_ids[:, 1:-1]
+        decoder_token_ids = decoder_token_ids
+        batch_normal_sizes = batch_normal_sizes
 
-            with torch.no_grad():
-                forward_outputs = model.forward(
-                    input_ids=batch["input_ids"],
-                    attention_mask=batch["attention_mask"],
-                    decoder_input_ids=decoder_token_ids,
-                    cross_attn_head_mask=hallucination_mask,
-                    output_hidden_states=True,
-                    return_dict=True
-                )
+        decoder_states = forward_outputs.decoder_hidden_states[-1]
+        predictions = F.softmax(forward_outputs.logits, dim=-1)
 
-            decoder_token_ids_wo_bos_eos = decoder_token_ids[:, 1:-1]
-            decoder_token_ids = decoder_token_ids
-            batch_normal_sizes = batch_normal_sizes
+        # Reshape and filter out ignore tokens
+        mask = torch.all(
+            torch.stack([decoder_token_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+        ).to(device)
+        set_size_mask = torch.all(
+            torch.stack([decoder_token_ids_wo_bos_eos != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+        ).to(device)
+        decoder_states = decoder_states[mask]
 
-            decoder_states = forward_outputs.decoder_hidden_states[-1]
-            predictions = F.softmax(forward_outputs.logits, dim=-1)
+        batch_normal_sizes = batch_normal_sizes[set_size_mask]  # Ignore BOS and last token sets
 
-            # Reshape and filter out ignore tokens
-            mask = torch.all(
-                torch.stack([decoder_token_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-            ).to(device)
-            set_size_mask = torch.all(
-                torch.stack([decoder_token_ids_wo_bos_eos != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-            ).to(device)
-            decoder_states = decoder_states[mask]
+        if distance_type == "inner_product":
+            decoder_states /= model.config.d_model ** 0.25
 
-            batch_normal_sizes = batch_normal_sizes[set_size_mask]  # Ignore BOS and last token sets
+        elif distance_type == "cosine":
+            decoder_states = F.normalize(decoder_states, p=2, dim=-1)
 
-            if distance_type == "inner_product":
-                decoder_states /= model.config.d_model ** 0.25
+        predictions = predictions[mask]
 
-            elif distance_type == "cosine":
-                decoder_states = F.normalize(decoder_states, p=2, dim=-1)
+        # Run the non-exchangeable conformal prediction
+        distances, conformity_scores = [], []
 
-            predictions = predictions[mask]
-
-            # Run the non-exchangeable conformal prediction
-            distances, conformity_scores = [], []
-
-            # This can be hard on memory so we do it in batches
-            bbatch_size = 1
-            for i in range(0, len(decoder_states), bbatch_size):
-                batch_distances, batch_conformity_scores = data_store.search_k(
-                    decoder_states[i:i + bbatch_size, :], k=num_neighbors
-                )
-                distances.append(batch_distances)
-                conformity_scores.append(batch_conformity_scores)
-
-            distances = torch.cat(distances, dim=0)
-            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-            weights = calibrator.compute_weights(distances)
-            conformal_results = calibrator.compute_q_hat(
-                weights, conformity_scores
+        # This can be hard on memory so we do it in batches
+        bbatch_size = 1
+        for i in range(0, len(decoder_states), bbatch_size):
+            batch_distances, batch_conformity_scores = data_store.search_k(
+                decoder_states[i:i + bbatch_size, :], k=num_neighbors
             )
-            q_hat = conformal_results["q_hat"]
-            _, batch_hallucination_sizes = calibrator.get_prediction_sets(conformity_score, predictions, q_hat)
-            batch_hallucination_sizes = torch.LongTensor(batch_hallucination_sizes)
+            distances.append(batch_distances)
+            conformity_scores.append(batch_conformity_scores)
 
-            # Resplit again into the original sequences
-            lengths = set_size_mask.long().sum(dim=-1).tolist()
-            normal_set_sizes[split].extend(list(torch.split(batch_normal_sizes, lengths)))
-            hallucination_set_sizes[split].extend(list(torch.split(batch_hallucination_sizes, lengths)))
+        distances = torch.cat(distances, dim=0)
+        conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+        weights = calibrator.compute_weights(distances)
+        conformal_results = calibrator.compute_q_hat(
+            weights, conformity_scores
+        )
+        q_hat = conformal_results["q_hat"]
+        _, batch_hallucination_sizes = calibrator.get_prediction_sets(conformity_score, predictions, q_hat)
+        batch_hallucination_sizes = torch.LongTensor(batch_hallucination_sizes)
+
+        # Resplit again into the original sequences
+        lengths = set_size_mask.long().sum(dim=-1).tolist()
 
     # Compute average treatment effect
     diffs = []

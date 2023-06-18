@@ -224,7 +224,9 @@ def plot_conditional_coverage(
     num_points = sum(bin_sizes)
     bin_coverages = np.array(bin_coverages)
     bin_coverages[np.isnan(bin_coverages)] = 0
-    expected_coverage_gap = np.sum(bin_sizes / num_points * np.abs(1 - alpha - np.array(bin_coverages)))
+    cmp = np.zeros(len(bin_coverages))
+    gaps = 1 - alpha - np.array(bin_coverages)
+    expected_coverage_gap = np.sum(bin_sizes / num_points * np.max(np.stack([cmp, gaps]), 0), axis=0)
 
     return expected_coverage_gap
 

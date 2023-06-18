@@ -25,7 +25,7 @@ from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
     ALPHA, TEMPERATURE, NUM_NEIGHBORS, HF_RESOURCES, DATASET_TASKS, MODEL_HIDDEN_SIZES
 )
-from src.conformal import ConformalCalibrator
+from src.conformal import ConformalCalibrator, ConformalLogitProcessor
 from src.custom_types import Device, WandBRun
 from src.datastore import DataStore
 from src.utils import shard_model
@@ -51,6 +51,7 @@ def run_experiments(
     model_identifier: str,
     dataset: str,
     batch_size: int,
+    method: str,
     conformity_method: str,
     distance_type: str,
     alpha: float,
@@ -134,19 +135,25 @@ def run_experiments(
     model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
     # Load calibration data
-    data_store = DataStore(
-        key_dim=model_hidden_size, value_dim=1,
-        distance_type=distance_type,
-        num_centroids=num_centroids, code_size=code_size,
-        num_probes=num_probes, use_quantization=use_quantization,
-        device=device
-    )  # Create empty data store
-    data_store.load(datastore_dir)  # Load in contents
-
     # Init conformal calibrator
     calibrator = ConformalCalibrator(
         alpha=alpha, temperature=temperature, device=device
     )
+
+    if method in ("conformal_nucleus_sampling", "non_conformal_nucleus_sampling"):
+        data_store = DataStore(
+            key_dim=model_hidden_size, value_dim=1,
+            distance_type=distance_type,
+            num_centroids=num_centroids, code_size=code_size,
+            num_probes=num_probes, use_quantization=use_quantization,
+            device=device
+        )  # Create empty data store
+        data_store.load(datastore_dir)  # Load in contents
+
+        if method == "conformal_nucleus_sampling":
+            logit_processor = ConformalLogitProcessor(
+                alpha, conformity_method, data_store, calibrator
+            )
 
     # Use calibration data store to test coverage on test set
     # Also collect the following statistics and save them with dill to plot later:
@@ -217,27 +224,52 @@ def run_experiments(
             predictions = predictions[mask]
             labels = labels[mask]
 
-            # Run the non-exchangeable conformal prediction
-            distances, conformity_scores = [], []
+            # Apply one of three different methods here:
+            #   1. "Classic" nucleus sampling: Include everything in the prediction set that corresponds to 1 - alpha
+            #       cumulative probability mass
+            #   2. Conformal nucleus sampling: Include everything in the prediction set according to the q hat
+            #       corresponding to the current entropy bin.
+            #   3. Non-exchangeable conformal nucleus sampling: Retrieve neighbors and compute q hat based on their
+            #       weighted conformity scores.
 
-            # This can be hard on memory so we do it in batches
-            bbatch_size = 1  # TODO: Debug batch_size
-            for i in range(0, len(hidden_states), bbatch_size):
+            # Run the classic nucleus sampling
+            if method == "nucleus_sampling":
+                top_p = torch.FloatTensor([1 - alpha]).repeat(predictions.shape[0])
 
-                batch_distances, batch_conformity_scores = data_store.search_k(
-                    hidden_states[i:i+bbatch_size, :], k=num_neighbors
+                prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                    conformity_method, predictions, q_hat=top_p
                 )
-                distances.append(batch_distances)
-                conformity_scores.append(batch_conformity_scores)
 
-            distances = torch.cat(distances, dim=0)
-            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-            weights = calibrator.compute_weights(distances)
-            conformal_results = calibrator.compute_q_hat(
-                weights, conformity_scores
-            )
-            q_hat = conformal_results["q_hat"]
-            prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
+            elif method == "conformal_nucleus_sampling":
+                q_hat = logit_processor.get_q_hats(predictions)
+
+                prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                    conformity_method, predictions, q_hat=q_hat
+                )
+
+            # Run the non-exchangeable conformal prediction
+            elif method == "non_exchangeable_conformal_nucleus_sampling":
+                distances, conformity_scores = [], []
+
+                # This can be hard on memory so we do it in batches
+                bbatch_size = 1  # TODO: Debug batch_size
+                for i in range(0, len(hidden_states), bbatch_size):
+
+                    batch_distances, batch_conformity_scores = data_store.search_k(
+                        hidden_states[i:i+bbatch_size, :], k=num_neighbors
+                    )
+                    distances.append(batch_distances)
+                    conformity_scores.append(batch_conformity_scores)
+
+                    distances = torch.cat(distances, dim=0)
+                    conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+                    weights = calibrator.compute_weights(distances)
+                    conformal_results = calibrator.compute_q_hat(
+                        weights, conformity_scores
+                    )
+                    q_hat = conformal_results["q_hat"]
+                    prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
+
             all_set_sizes.append(list(set_sizes))
 
             # Evaluate
@@ -246,11 +278,12 @@ def run_experiments(
             coverage.append(is_covered)
 
             # Add results for this batch
-            avg_distances += list(distances.mean(dim=-1).cpu().numpy())
-            avg_weights += list(weights.mean(dim=-1).cpu().numpy())
-            avg_conformity_scores += list(conformity_scores.mean(dim=-1).cpu().numpy())
-            all_n_effs += list(conformal_results["n_eff"].cpu().numpy())
-            all_q_hats += list(q_hat.cpu().numpy())
+            if method == "non_exchangeable_conformal_nucleus_sampling":
+                avg_distances += list(distances.mean(dim=-1).cpu().numpy())
+                avg_weights += list(weights.mean(dim=-1).cpu().numpy())
+                avg_conformity_scores += list(conformity_scores.mean(dim=-1).cpu().numpy())
+                all_n_effs += list(conformal_results["n_eff"].cpu().numpy())
+                all_q_hats += list(q_hat.cpu().numpy())
 
         # Save results
         flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
@@ -261,16 +294,20 @@ def run_experiments(
         results = {
             "coverage": coverage,
             "coverage_percentage": coverage_percentage,
-            "avg_distances": avg_distances,
-            "avg_weights": avg_weights,
-            "avg_conformity_scores": avg_conformity_scores,
-            "all_n_effs": all_n_effs,
-            "all_q_hats": all_q_hats,
             "all_set_sizes": all_set_sizes
         }
 
+        if method == "non_exchangeable_conformal_nucleus_sampling":
+            results.update({
+                "avg_distances": avg_distances,
+                "avg_weights": avg_weights,
+                "avg_conformity_scores": avg_conformity_scores,
+                "all_n_effs": all_n_effs,
+                "all_q_hats": all_q_hats,
+            })
+
         timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
-        file_name = f"{timestamp}_{dataset}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}_{distance_type}.pkl"
+        file_name = f"{timestamp}_{dataset}_{method}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}_{distance_type}.pkl"
 
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
@@ -301,6 +338,12 @@ if __name__ == "__main__":
         type=str,
         default="inner_product",
         choices=("inner_product", "l2", "cosine")
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="non_exchangeable_conformal_nucleus_sampling",
+        choices=("non_exchangeable_conformal_nucleus_sampling", "conformal_nucleus_sampling", "nucleus_sampling")
     )
     parser.add_argument(
         "--batch-size",
@@ -403,6 +446,7 @@ if __name__ == "__main__":
             model_identifier=args.model,
             dataset=args.dataset,
             batch_size=args.batch_size,
+            method=args.method,
             conformity_method=args.conformity_method,
             distance_type=args.distance_type,
             alpha=args.alpha,
