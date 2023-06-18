@@ -269,14 +269,18 @@ class ConformalLogitProcessor(LogitsProcessor):
         # Bin conformity stores by entropy and get the corresponding q_hat
         conformity_scores = data_store.value_tensor.to(self.calibrator.device)
         entropy_values = data_store.value_tensor.to(self.calibrator.device)
-        self.bin_boundaries = torch.linspace(
-            torch.min(entropy_values).item(), torch.max(entropy_values).item(), self.num_bins
-        ).to(self.calibrator.device)
-        bins = [[] for _ in range(self.num_bins)]
+        bin_size = int(entropy_values.shape[0] / self.num_bins)
 
-        for entropy, conformity in zip(entropy_values, conformity_scores):
-            bin_index = torch.searchsorted(self.bin_boundaries, entropy).item() - 1
-            bins[bin_index].append(conformity.item())
+        # Sort by entropy values
+        entropy_indices = torch.argsort(entropy_values.squeeze(-1), dim=0)
+        conformity_scores = conformity_scores[entropy_indices].squeeze(-1)
+
+        bins = [
+            conformity_scores[i * bin_size:(i+1) * bin_size].squeeze(-1) for i in range(self.num_bins)
+        ]
+        self.bin_boundaries = torch.FloatTensor(
+            [torch.min(bin) for bin in bins]
+        ).to(self.calibrator.device)
 
         # Compute q_hat for each bin
         self.q_hats = []
