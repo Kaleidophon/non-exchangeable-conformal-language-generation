@@ -289,7 +289,7 @@ class ConformalLogitProcessor(LogitsProcessor):
             N = len(bin)
             q_level = np.clip(np.ceil((N + 1) * (1 - alpha)) / N, 0, 1)
             q_hat = torch.FloatTensor(
-                [np.quantile(bin, q_level, method='higher')]
+                [np.quantile(bin.cpu().numpy(), q_level, method='higher')]
             ).squeeze(-1).to(self.calibrator.device)
             self.q_hats.append(q_hat)
 
