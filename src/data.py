@@ -73,7 +73,6 @@ class TextDataset(Dataset):
 
         if self.ravfogel_prompt:
             self.tokenizer.padding_side = "left"
-            data = " ".join(data.split(" ")[:35])  # Limit to the first 35 words
 
         tokenized = self.tokenizer(data, return_tensors="pt", **self.tokenizer_kwargs)
 
@@ -171,6 +170,7 @@ def load_data(
         if "test" in load_splits:
 
             data_split = codecs.open(f"{data_dir}/{dataset_name}/test.txt", "r", "utf-8").readlines()
+            data_split = "".join(data_split).split("</s>")
             test_dataset = TextDataset(
                 data_split, tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )

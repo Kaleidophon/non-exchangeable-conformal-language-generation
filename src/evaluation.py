@@ -111,7 +111,14 @@ def evaluate_generation_model(
 ):
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
-        reference_generations = [" ".join(line.strip().split(" ")[:200]) for line in f.readlines()]
+        reference_generations = "".join(f.readlines())
+        reference_generations = reference_generations.split("</s>")
+
+        # Truncate to 200 words
+        reference_generations = [
+            " ".join(reference.split(" ")[:200])
+            for reference in reference_generations
+        ]
 
     # Evaluate translations
     result_dict = {}

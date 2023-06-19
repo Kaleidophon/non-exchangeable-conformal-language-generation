@@ -6,6 +6,7 @@ Plot the results of the coverage experiments.
 import argparse
 from functools import reduce
 from operator import add
+import os
 import re
 from typing import List, Iterable, Dict, Optional
 
@@ -63,7 +64,11 @@ def plot_coverage_results(
     for plot_result in plot_results:
 
         # Extract data
-        data = {key: value[plot_result] for key, value in results.items()}
+        try:
+            data = {key: value[plot_result] for key, value in results.items()}
+
+        except KeyError:
+            continue
 
         if plot_result == "coverage_percentage":
             plot_bar_chart(data, x_label=plot_by, y_label="Coverage", img_path=f"{save_path}/coverage.pdf")
@@ -220,6 +225,9 @@ def plot_conditional_coverage(
     else:
         plt.show()
 
+    # Compute average set size
+    print("Average set size:", np.mean(set_sizes))
+
     # Compute expected coverage gap
     num_points = sum(bin_sizes)
     bin_coverages = np.array(bin_coverages)
@@ -318,5 +326,9 @@ if __name__ == "__main__":
         choices=["neighbors", "alpha", "temperature"]
     )
     args = parser.parse_args()
+
+    if args.save_path is not None:
+        if not os.path.exists(args.save_path):
+            os.makedirs(args.save_path)
 
     plot_coverage_results(args.result_files, args.plot_by, args.save_path)

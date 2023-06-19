@@ -140,7 +140,7 @@ def evaluate_generations(
     # That is actually not how Ravfogel et al. generate
     else:
         del generation_config["max_length"]
-        generation_config["max_new_tokens"] = 200 - 35
+        generation_config["max_new_tokens"] = 400
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
@@ -219,8 +219,8 @@ def evaluate_generations(
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
             # Truncate to 200 words for language modeling (Ravfogel et al. setup)
-            #if task == "lm":
-            #    outputs = [" ".join(out.split()[:200]) for out in outputs]
+            if task == "lm":
+                outputs = [" ".join(out.split()[:200]) for out in outputs]
 
             generations[n] += outputs
 
