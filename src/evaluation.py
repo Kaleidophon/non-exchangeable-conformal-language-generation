@@ -112,7 +112,7 @@ def evaluate_generation_model(
     # Load reference generations
     with codecs.open(reference_file, "r", "utf-8") as f:
         reference_generations = "".join(f.readlines())
-        reference_generations = reference_generations.split("</s>")
+        reference_generations = reference_generations.split("</s>")[:-1]
 
         # Truncate to 200 words
         reference_generations = [

@@ -170,7 +170,7 @@ def load_data(
         if "test" in load_splits:
 
             data_split = codecs.open(f"{data_dir}/{dataset_name}/test.txt", "r", "utf-8").readlines()
-            data_split = "".join(data_split).split("</s>")
+            data_split = "".join(data_split).split("</s>")[:-1]
             test_dataset = TextDataset(
                 data_split, tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
