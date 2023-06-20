@@ -21,7 +21,7 @@ import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import M2M100PreTrainedModel, OPTPreTrainedModel
+from transformers import M2M100PreTrainedModel, OPTPreTrainedModel, OPTForCausalLM
 
 # PROJECT
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor
@@ -99,7 +99,6 @@ def perform_shift_experiment(
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
         truncation=True,
-        use_ravfogel_prompt=True,
         load_splits=("test",)
     )["test"]
     model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
@@ -166,7 +165,7 @@ def perform_shift_experiment(
                     mean = torch.FloatTensor([mean]).to(device)
                     std = torch.FloatTensor([std]).to(device)
 
-                    embeds = model.embeddings(input_ids)
+                    embeds = model.model.decoder.embed_tokens(input_ids)
                     embeds = embeds + torch.randn(embeds.shape).to(device) * std + mean
                     forward_kwargs["inputs_embeds"] = embeds
 
