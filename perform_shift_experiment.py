@@ -14,16 +14,17 @@ from typing import Optional, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
+from einops import rearrange
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import M2M100PreTrainedModel, OPTPreTrainedModel, OPTForCausalLM
+from transformers import M2M100PreTrainedModel, OPTPreTrainedModel
 
 # PROJECT
-from src.conformal import ConformalCalibrator, NonExchangeableConformalLogitProcessor
+from src.conformal import ConformalCalibrator, ConformalLogitProcessor
 from src.custom_types import Device
 from src.data import load_data
 from src.datastore import DataStore
@@ -46,10 +47,11 @@ except ImportError:
     pass
 
 
-def perform_hallucinations_experiment(
+def perform_shift_experiment(
     model_identifier: str,
     dataset: str,
     batch_size: int,
+    method: str,
     temperature: float,
     data_dir: str,
     result_dir: str,
@@ -72,7 +74,6 @@ def perform_hallucinations_experiment(
     timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
 
     # Load data and model
-    src_lang, tgt_lang = DATASETS[dataset]
     model_class, config_class, tokenizer_class = HF_RESOURCES[model_identifier]
 
     # Initialize model
@@ -101,39 +102,29 @@ def perform_hallucinations_experiment(
         use_ravfogel_prompt=True,
         load_splits=("test",)
     )["test"]
-
-    generation_config = {
-        "max_length": model.config.max_length,
-        "early_stopping": True,
-        "forced_bos_token_id": tokenizer.get_lang_id(tgt_lang),
-        "do_sample": True,
-        "num_beams": 1,
-    }
+    model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
     calibrator = ConformalCalibrator(
         alpha=alpha, temperature=temperature, device=device
     )
 
-    # Init logit processor
-    generation_config["output_hidden_states"] = True
-    generation_config["return_dict_in_generate"] = True
+    if method in ("conformal_nucleus_sampling", "non_conformal_nucleus_sampling"):
+        if method == "conformal_nucleus_sampling":
+            logit_processor = ConformalLogitProcessor(
+                alpha, conformity_score, data_store, calibrator
+            )
 
-    logit_processor = NonExchangeableConformalLogitProcessor(
-        data_store=data_store, conformity_score=conformity_score,
-        calibrator=calibrator, distance_type=distance_type,
-        num_neighbors=num_neighbors,
-        store_set_sizes=True
-    )
-    model = logit_processor.patch_model(model)
-    generation_config["logits_processor"] = [logit_processor]
-
-    # Record set sizes for generations and hallucinations on the validation set
-    normal_set_sizes = defaultdict(list)
-    hallucination_set_sizes = defaultdict(list)
-
+    # Define noise parameters
     noise_parameters = [
         None, (0, 0.5), (0, 1), (0, 2)
     ]
+
+    # Define which information to save
+    all_set_sizes = defaultdict(list)
+    all_coverage = defaultdict(list)
+    all_distances = defaultdict(list)
+    all_weights = defaultdict(list)
+    all_q_hats = defaultdict(list)
 
     for noise_params in noise_parameters:
 
@@ -141,7 +132,7 @@ def perform_hallucinations_experiment(
 
             mean, std = noise_params
             mean = torch.FloatTensor([mean]).to(device)
-            std = torch.FloatTensor([std]).to(device)
+            std = torch.sqrt(torch.FloatTensor([std]).to(device))
 
             # Patch functions to add noise
             # For M2M100 models, patch the encoder function
@@ -149,10 +140,10 @@ def perform_hallucinations_experiment(
                 _, _, output = args
 
                 decoder_input = output[0]
-                decoder_input = decoder_input + torch.normal(mean, std, size=decoder_input.shape).to(device)
-                args[2][0] = decoder_input
+                decoder_input = decoder_input + torch.randn(decoder_input.shape).to(device) * std + mean
+                output.last_hidden_state = decoder_input
 
-                return args
+                return output
 
             model.model.encoder.register_forward_hook(m2m100_forward_hook)
 
@@ -166,171 +157,134 @@ def perform_hallucinations_experiment(
 
             with torch.no_grad():
 
+                input_ids = batch["input_ids"].to(device)
+                labels = batch["labels"].to(device)
+
                 # For OPT model, add noise to embeddings
                 if noise_params is not None and isinstance(model, OPTPreTrainedModel):
                     mean, std = noise_params
                     mean = torch.FloatTensor([mean]).to(device)
                     std = torch.FloatTensor([std]).to(device)
 
-                    input_ids = batch["input_ids"].to(device)
                     embeds = model.embeddings(input_ids)
-                    embeds = embeds + torch.normal(mean, std, size=embeds.shape).to(device)
+                    embeds = embeds + torch.randn(embeds.shape).to(device) * std + mean
                     forward_kwargs["inputs_embeds"] = embeds
 
                 elif isinstance(model, OPTPreTrainedModel):
-                    forward_kwargs["input_ids"] = batch["input_ids"].to(device)
+                    forward_kwargs["input_ids"] = input_ids
 
                 elif isinstance(model, M2M100PreTrainedModel):
                     decoder_token_ids = batch["decoder_input_ids"].to(device)
                     forward_kwargs["decoder_input_ids"] = decoder_token_ids
+                    forward_kwargs["input_ids"] = input_ids
 
-                forward_outputs = model.forward(**forward_kwargs)
+                outputs = model.forward(**forward_kwargs)
 
-            decoder_token_ids_wo_bos_eos = decoder_token_ids[:, 1:-1]
-            decoder_states = forward_outputs.decoder_hidden_states[-1]
-            predictions = F.softmax(forward_outputs.logits, dim=-1)
+            if isinstance(model, M2M100PreTrainedModel):
+                hidden_states = outputs.decoder_hidden_states[-1]
+
+            else:
+                hidden_states = outputs.hidden_states[-1]
+
+            predictions = F.softmax(outputs.logits, dim=-1)
 
             # Reshape and filter out ignore tokens
+            hidden_states = rearrange(hidden_states, "b s h -> (b s) h")
+            predictions = rearrange(predictions, "b s c -> (b s) c")
+            input_ids = rearrange(input_ids, "b s -> (b s)")
+            labels = rearrange(labels, "b s -> (b s)")
             mask = torch.all(
-                torch.stack([decoder_token_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+                torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
             ).to(device)
-            set_size_mask = torch.all(
-                torch.stack([decoder_token_ids_wo_bos_eos != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-            ).to(device)
-            decoder_states = decoder_states[mask]
-
-            batch_normal_sizes = batch_normal_sizes[set_size_mask]  # Ignore BOS and last token sets
+            hidden_states = hidden_states[mask]
 
             if distance_type == "inner_product":
-                decoder_states /= model.config.d_model ** 0.25
+                hidden_states /= model_hidden_size ** 0.25
 
             elif distance_type == "cosine":
-                decoder_states = F.normalize(decoder_states, p=2, dim=-1)
+                hidden_states = F.normalize(hidden_states, p=2, dim=-1)
+
+            if len(hidden_states) == 0:
+                continue
 
             predictions = predictions[mask]
+            labels = labels[mask]
+
+            # Apply one of three different methods here:
+            #   1. "Classic" nucleus sampling: Include everything in the prediction set that corresponds to 1 - alpha
+            #       cumulative probability mass
+            #   2. Conformal nucleus sampling: Include everything in the prediction set according to the q hat
+            #       corresponding to the current entropy bin.
+            #   3. Non-exchangeable conformal nucleus sampling: Retrieve neighbors and compute q hat based on their
+            #       weighted conformity scores.
+
+            # Run the classic nucleus sampling
+            if method == "nucleus_sampling":
+                top_p = q_hat = torch.FloatTensor([1 - alpha]).repeat(predictions.shape[0])
+
+                batch_prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                    conformity_score, predictions, q_hat=top_p
+                )
+
+            elif method == "conformal_nucleus_sampling":
+                q_hat = logit_processor.get_q_hats(predictions)
+
+                batch_prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                    conformity_score, predictions, q_hat=q_hat
+                )
 
             # Run the non-exchangeable conformal prediction
-            distances, conformity_scores = [], []
+            elif method == "non_exchangeable_conformal_nucleus_sampling":
+                set_sizes = []
+                q_hat = []
+                distances = []
+                weights = []
+                prediction_sets = []
 
-            # This can be hard on memory so we do it in batches
-            bbatch_size = 1
-            for i in range(0, len(decoder_states), bbatch_size):
-                batch_distances, batch_conformity_scores = data_store.search_k(
-                    decoder_states[i:i + bbatch_size, :], k=num_neighbors
-                )
-                distances.append(batch_distances)
-                conformity_scores.append(batch_conformity_scores)
+                # This can be hard on memory so we do it in batches
+                for i in range(0, len(hidden_states), 1):
+                    batch_distances, batch_conformity_scores = data_store.search_k(
+                        hidden_states[i:i + 1, :], k=num_neighbors
+                    )
 
-            distances = torch.cat(distances, dim=0)
-            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-            weights = calibrator.compute_weights(distances)
-            conformal_results = calibrator.compute_q_hat(
-                weights, conformity_scores
-            )
-            q_hat = conformal_results["q_hat"]
-            _, batch_hallucination_sizes = calibrator.get_prediction_sets(conformity_score, predictions, q_hat)
-            batch_hallucination_sizes = torch.LongTensor(batch_hallucination_sizes)
+                    batch_weights = calibrator.compute_weights(batch_distances)
+                    conformal_results = calibrator.compute_q_hat(
+                        batch_weights, batch_conformity_scores
+                    )
+                    batch_q_hat = conformal_results["q_hat"]
+                    batch_prediction_sets, batch_set_sizes = calibrator.get_prediction_sets(
+                        conformity_score, predictions[i, :].unsqueeze(0), batch_q_hat
+                    )
 
-            # Resplit again into the original sequences
-            lengths = set_size_mask.long().sum(dim=-1).tolist()
+                    prediction_sets.append(batch_prediction_sets)
+                    set_sizes.append(batch_set_sizes)
+                    q_hat.append(batch_q_hat)
+                    distances.append(batch_distances)
+                    weights.append(batch_weights)
 
-    # Compute average treatment effect
-    diffs = []
+                prediction_sets = torch.cat(prediction_sets, dim=0)
+                set_sizes = np.concatenate(set_sizes, axis=0)
+                q_hat = torch.cat(q_hat, dim=0)
+                distances = torch.cat(distances, dim=0)
+                weights = torch.cat(weights, dim=0)
 
-    for seq_normal, seq_hallucinatory in zip(normal_set_sizes["test"], hallucination_set_sizes["test"]):
-        diff = seq_hallucinatory.float() - seq_normal.float()
-        diffs.append(diff)
+            # Evaluate
+            label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+            is_covered = list((label_probs > 0).float().cpu().numpy())
+            all_coverage[noise_params] += is_covered
+            all_q_hats[noise_params] += list(q_hat.cpu().numpy())
+            all_set_sizes[noise_params] += list(set_sizes)
 
-    ate = torch.cat(diffs).mean().item()
-    print(f"ATE: {ate:.4f}")
+            # Add results for this batch
+            if method == "non_exchangeable_conformal_nucleus_sampling":
+                all_distances[noise_params] += list(distances.mean(dim=-1).cpu().numpy())
+                all_weights[noise_params] += list(weights.mean(dim=-1).cpu().numpy())
 
-    # Fit time step models
-    max_time_step = max([len(s) for s in normal_set_sizes["dev"]])
-    num_seqs = len(normal_set_sizes["dev"])
+            # TODO: Debug
+            break
 
-    # Put data into a nicer format
-    coverage_matrix_normal = np.zeros((num_seqs, max_time_step)) - 1
-    coverage_matrix_hallucinatory = np.zeros((num_seqs, max_time_step)) - 1
-
-    for i in range(num_seqs):
-        coverage_matrix_normal[i, :len(normal_set_sizes["dev"][i])] = normal_set_sizes["dev"][i]
-        coverage_matrix_hallucinatory[i, :len(hallucination_set_sizes["dev"][i])] = hallucination_set_sizes["dev"][i]
-
-    # Get means and variances
-    non_negative_entries_normal = np.sum((coverage_matrix_normal != -1).astype(int), axis=0)
-    coverage_matrix_normal[coverage_matrix_normal == -1] = 0
-    means_normal = np.sum(coverage_matrix_normal, axis=0) / non_negative_entries_normal
-    std_devs_normal = np.sqrt(
-        np.sum((coverage_matrix_normal - means_normal[None, :]) ** 2, axis=0) / non_negative_entries_normal
-    ) / np.sqrt(non_negative_entries_normal)
-
-    non_negative_entries_hallucinatory = np.sum((coverage_matrix_hallucinatory != -1).astype(int), axis=0)
-    coverage_matrix_hallucinatory[coverage_matrix_hallucinatory == -1] = 0
-    means_hallucinatory = np.sum(coverage_matrix_hallucinatory, axis=0) / non_negative_entries_hallucinatory
-    std_devs_hallucinatory = np.sqrt(
-        np.sum((coverage_matrix_hallucinatory - means_hallucinatory[None, :]) ** 2, axis=0)
-        / non_negative_entries_hallucinatory
-    ) / np.sqrt(non_negative_entries_hallucinatory)
-
-    def score_set_sizes(set_sizes, means, std_devs):
-        return sum([
-            stats.norm.logpdf(set_size.item(), loc=mean, scale=std_dev+ 1e-16)
-            for set_size, mean, std_dev in zip(set_sizes, means, std_devs)
-        ])
-
-    # Compute Bayes factors
-    bayes_factors_normal = [
-        score_set_sizes(set_sizes_normal, means_hallucinatory, std_devs_hallucinatory) -
-        score_set_sizes(set_sizes_normal, means_normal, std_devs_normal)  # Subtract since we are in log space
-        for set_sizes_normal in normal_set_sizes["test"]
-    ]
-
-    bayes_factors_hallucinatory = [
-        score_set_sizes(set_sizes_hallucinatory, means_hallucinatory, std_devs_hallucinatory) -
-        score_set_sizes(set_sizes_hallucinatory, means_normal, std_devs_normal)  # Subtract since we are in log space
-        for set_sizes_hallucinatory in hallucination_set_sizes["test"]
-    ]
-
-    # Put into nice table
-    result_df = pd.DataFrame(
-        columns=["Data", "Avg. Bayes Factor", "Accept H0", "Accept H1", "Undecided", "Type I rate", "Type II rate"]
-    )
-    result_df["Data"] = ["Normal", "Hallucinatory"]
-    result_df.set_index("Data", inplace=True)
-
-    # Compute occurrences and put into table
-    normal_num_h0 = sum([bf <= -3 for bf in bayes_factors_normal])
-    normal_num_h1 = sum([bf >= 3 for bf in bayes_factors_normal])
-    normal_num_undecided = len(bayes_factors_normal) - normal_num_h0 - normal_num_h1
-    normal_type1_rate = normal_num_h0 / len(bayes_factors_normal)  # FP rate - don't accept H0 since no hallucinations
-    normal_type2_rate = normal_num_undecided / len(bayes_factors_normal)  # FN rate - should have accepted H1
-    result_df.loc["Normal", "Avg. Bayes Factor"] = np.mean(bayes_factors_normal)
-    result_df.loc["Normal", "Accept H0"] = normal_num_h0
-    result_df.loc["Normal", "Accept H1"] = normal_num_h1
-    result_df.loc["Normal", "Undecided"] = normal_num_undecided
-    result_df.loc["Normal", "Type I rate"] = normal_type1_rate
-    result_df.loc["Normal", "Type II rate"] = normal_type2_rate
-
-    hallucinatory_num_h0 = sum([bf <= -3 for bf in bayes_factors_hallucinatory])
-    hallucinatory_num_h1 = sum([bf >= 3 for bf in bayes_factors_hallucinatory])
-    hallucinatory_num_undecided = len(bayes_factors_hallucinatory) - hallucinatory_num_h0 - hallucinatory_num_h1
-    # FP rate - don't accept H1 we have hallucinations
-    hallucinatory_type1_rate = hallucinatory_num_h1 / len(bayes_factors_hallucinatory)
-    # FN rate - should have accepted H1
-    hallucinatory_type2_rate = hallucinatory_num_undecided / len(bayes_factors_hallucinatory)
-    result_df.loc["Hallucinatory", "Avg. Bayes Factor"] = np.mean(bayes_factors_hallucinatory)
-    result_df.loc["Hallucinatory", "Accept H0"] = hallucinatory_num_h0
-    result_df.loc["Hallucinatory", "Accept H1"] = hallucinatory_num_h1
-    result_df.loc["Hallucinatory", "Undecided"] = hallucinatory_num_undecided
-    result_df.loc["Hallucinatory", "Type I rate"] = hallucinatory_type1_rate
-    result_df.loc["Hallucinatory", "Type II rate"] = hallucinatory_type2_rate
-
-    print(result_df.to_markdown())
-
-    # Save results to path
-    with open(f"{result_dir}/{timestamp}_hallucinations_results.txt", "w") as results_file:
-        results_file.write(f"ATE: {ate:.4f}\n\n")
-        results_file.write(result_df.to_markdown())
+    # TODO: Save results to file and pickle
+    a = 3
 
 
 if __name__ == "__main__":
@@ -364,6 +318,12 @@ if __name__ == "__main__":
         type=str,
         default="inner_product",
         choices=("inner_product", "l2", "cosine")
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="non_exchangeable_conformal_nucleus_sampling",
+        choices=("non_exchangeable_conformal_nucleus_sampling", "conformal_nucleus_sampling", "nucleus_sampling")
     )
     parser.add_argument(
         "--batch-size",
@@ -444,10 +404,11 @@ if __name__ == "__main__":
         )  # Create empty data store
         data_store.load(args.datastore_dir)  # Load in contents
 
-        perform_hallucinations_experiment(
+        perform_shift_experiment(
             model_identifier=args.model_identifier,
             dataset=args.dataset,
             batch_size=args.batch_size,
+            method=args.method,
             temperature=args.temperature,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
