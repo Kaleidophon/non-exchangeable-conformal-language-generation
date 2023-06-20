@@ -140,7 +140,7 @@ def evaluate_generations(
     # That is actually not how Ravfogel et al. generate
     else:
         del generation_config["max_length"]
-        generation_config["max_new_tokens"] = 400
+        generation_config["max_new_tokens"] = 350
 
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
@@ -223,7 +223,7 @@ def evaluate_generations(
                 outputs = [" ".join(out.split()[:200]) for out in outputs]
 
             generations[n] += outputs
-            
+
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
 

@@ -7,7 +7,9 @@ back into the decoder, but restricting the attention on the source side. We then
 import argparse
 from collections import defaultdict
 from datetime import datetime
+from functools import wraps
 import os
+import types
 from typing import Optional, Tuple, List
 
 # EXT
@@ -18,6 +20,7 @@ import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
+from transformers import M2M100PreTrainedModel, OPTPreTrainedModel, OPTForCausalLM
 
 # PROJECT
 from src.conformal import ConformalCalibrator, NonExchangeableConformalLogitProcessor
@@ -128,71 +131,108 @@ def perform_hallucinations_experiment(
     normal_set_sizes = defaultdict(list)
     hallucination_set_sizes = defaultdict(list)
 
-    noises = [
-        None, (0, 1), (0, 2.5), (0, 5)
+    noise_parameters = [
+        None, (0, 0.5), (0, 1), (0, 2)
     ]
 
-    for batch in tqdm(data_loader, total=len(data_loader)):
+    for noise_params in noise_parameters:
 
-        with torch.no_grad():
-            forward_outputs = model.forward(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                decoder_input_ids=batch["decoder_input_ids"],
-                output_hidden_states=True,
-                return_dict=True
+        if noise_params is not None and isinstance(model, M2M100PreTrainedModel):
+
+            mean, std = noise_params
+            mean = torch.FloatTensor([mean]).to(device)
+            std = torch.FloatTensor([std]).to(device)
+
+            # Patch functions to add noise
+            # For M2M100 models, patch the encoder function
+            def m2m100_forward_hook(*args):
+                _, _, output = args
+
+                decoder_input = output[0]
+                decoder_input = decoder_input + torch.normal(mean, std, size=decoder_input.shape).to(device)
+                args[2][0] = decoder_input
+
+                return args
+
+            model.model.encoder.register_forward_hook(m2m100_forward_hook)
+
+        for batch in tqdm(data_loader, total=len(data_loader)):
+
+            forward_kwargs = {
+                "attention_mask": batch["attention_mask"].to(device),
+                "output_hidden_states": True,
+                "return_dict": True,
+            }
+
+            with torch.no_grad():
+
+                # For OPT model, add noise to embeddings
+                if noise_params is not None and isinstance(model, OPTPreTrainedModel):
+                    mean, std = noise_params
+                    mean = torch.FloatTensor([mean]).to(device)
+                    std = torch.FloatTensor([std]).to(device)
+
+                    input_ids = batch["input_ids"].to(device)
+                    embeds = model.embeddings(input_ids)
+                    embeds = embeds + torch.normal(mean, std, size=embeds.shape).to(device)
+                    forward_kwargs["inputs_embeds"] = embeds
+
+                elif isinstance(model, OPTPreTrainedModel):
+                    forward_kwargs["input_ids"] = batch["input_ids"].to(device)
+
+                elif isinstance(model, M2M100PreTrainedModel):
+                    decoder_token_ids = batch["decoder_input_ids"].to(device)
+                    forward_kwargs["decoder_input_ids"] = decoder_token_ids
+
+                forward_outputs = model.forward(**forward_kwargs)
+
+            decoder_token_ids_wo_bos_eos = decoder_token_ids[:, 1:-1]
+            decoder_states = forward_outputs.decoder_hidden_states[-1]
+            predictions = F.softmax(forward_outputs.logits, dim=-1)
+
+            # Reshape and filter out ignore tokens
+            mask = torch.all(
+                torch.stack([decoder_token_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+            ).to(device)
+            set_size_mask = torch.all(
+                torch.stack([decoder_token_ids_wo_bos_eos != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
+            ).to(device)
+            decoder_states = decoder_states[mask]
+
+            batch_normal_sizes = batch_normal_sizes[set_size_mask]  # Ignore BOS and last token sets
+
+            if distance_type == "inner_product":
+                decoder_states /= model.config.d_model ** 0.25
+
+            elif distance_type == "cosine":
+                decoder_states = F.normalize(decoder_states, p=2, dim=-1)
+
+            predictions = predictions[mask]
+
+            # Run the non-exchangeable conformal prediction
+            distances, conformity_scores = [], []
+
+            # This can be hard on memory so we do it in batches
+            bbatch_size = 1
+            for i in range(0, len(decoder_states), bbatch_size):
+                batch_distances, batch_conformity_scores = data_store.search_k(
+                    decoder_states[i:i + bbatch_size, :], k=num_neighbors
+                )
+                distances.append(batch_distances)
+                conformity_scores.append(batch_conformity_scores)
+
+            distances = torch.cat(distances, dim=0)
+            conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+            weights = calibrator.compute_weights(distances)
+            conformal_results = calibrator.compute_q_hat(
+                weights, conformity_scores
             )
+            q_hat = conformal_results["q_hat"]
+            _, batch_hallucination_sizes = calibrator.get_prediction_sets(conformity_score, predictions, q_hat)
+            batch_hallucination_sizes = torch.LongTensor(batch_hallucination_sizes)
 
-        decoder_token_ids_wo_bos_eos = decoder_token_ids[:, 1:-1]
-        decoder_token_ids = decoder_token_ids
-        batch_normal_sizes = batch_normal_sizes
-
-        decoder_states = forward_outputs.decoder_hidden_states[-1]
-        predictions = F.softmax(forward_outputs.logits, dim=-1)
-
-        # Reshape and filter out ignore tokens
-        mask = torch.all(
-            torch.stack([decoder_token_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-        ).to(device)
-        set_size_mask = torch.all(
-            torch.stack([decoder_token_ids_wo_bos_eos != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-        ).to(device)
-        decoder_states = decoder_states[mask]
-
-        batch_normal_sizes = batch_normal_sizes[set_size_mask]  # Ignore BOS and last token sets
-
-        if distance_type == "inner_product":
-            decoder_states /= model.config.d_model ** 0.25
-
-        elif distance_type == "cosine":
-            decoder_states = F.normalize(decoder_states, p=2, dim=-1)
-
-        predictions = predictions[mask]
-
-        # Run the non-exchangeable conformal prediction
-        distances, conformity_scores = [], []
-
-        # This can be hard on memory so we do it in batches
-        bbatch_size = 1
-        for i in range(0, len(decoder_states), bbatch_size):
-            batch_distances, batch_conformity_scores = data_store.search_k(
-                decoder_states[i:i + bbatch_size, :], k=num_neighbors
-            )
-            distances.append(batch_distances)
-            conformity_scores.append(batch_conformity_scores)
-
-        distances = torch.cat(distances, dim=0)
-        conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-        weights = calibrator.compute_weights(distances)
-        conformal_results = calibrator.compute_q_hat(
-            weights, conformity_scores
-        )
-        q_hat = conformal_results["q_hat"]
-        _, batch_hallucination_sizes = calibrator.get_prediction_sets(conformity_score, predictions, q_hat)
-        batch_hallucination_sizes = torch.LongTensor(batch_hallucination_sizes)
-
-        # Resplit again into the original sequences
-        lengths = set_size_mask.long().sum(dim=-1).tolist()
+            # Resplit again into the original sequences
+            lengths = set_size_mask.long().sum(dim=-1).tolist()
 
     # Compute average treatment effect
     diffs = []
