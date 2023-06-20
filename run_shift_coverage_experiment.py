@@ -7,21 +7,18 @@ back into the decoder, but restricting the attention on the source side. We then
 import argparse
 from collections import defaultdict
 from datetime import datetime
-from functools import wraps
 import os
-import types
 from typing import Optional, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
+import dill
 from einops import rearrange
 import numpy as np
-import pandas as pd
-import scipy.stats as stats
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from transformers import M2M100PreTrainedModel, OPTPreTrainedModel, OPTForCausalLM
+from transformers import M2M100PreTrainedModel, OPTPreTrainedModel
 
 # PROJECT
 from src.conformal import ConformalCalibrator, ConformalLogitProcessor
@@ -115,7 +112,7 @@ def perform_shift_experiment(
 
     # Define noise parameters
     noise_parameters = [
-        None, (0, 0.5), (0, 1), (0, 2)
+        None, (0, 0.25), (0, 0.5), (0, 1)
     ]
 
     # Define which information to save
@@ -146,7 +143,7 @@ def perform_shift_experiment(
 
             model.model.encoder.register_forward_hook(m2m100_forward_hook)
 
-        for batch in tqdm(data_loader, total=len(data_loader)):
+        for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
 
             forward_kwargs = {
                 "attention_mask": batch["attention_mask"].to(device),
@@ -221,14 +218,14 @@ def perform_shift_experiment(
             if method == "nucleus_sampling":
                 top_p = q_hat = torch.FloatTensor([1 - alpha]).repeat(predictions.shape[0])
 
-                batch_prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                prediction_sets, set_sizes = calibrator.get_prediction_sets(
                     conformity_score, predictions, q_hat=top_p
                 )
 
             elif method == "conformal_nucleus_sampling":
                 q_hat = logit_processor.get_q_hats(predictions)
 
-                batch_prediction_sets, set_sizes = calibrator.get_prediction_sets(
+                prediction_sets, set_sizes = calibrator.get_prediction_sets(
                     conformity_score, predictions, q_hat=q_hat
                 )
 
@@ -279,11 +276,26 @@ def perform_shift_experiment(
                 all_distances[noise_params] += list(distances.mean(dim=-1).cpu().numpy())
                 all_weights[noise_params] += list(weights.mean(dim=-1).cpu().numpy())
 
-            # TODO: Debug
-            break
+    # Collect results
+    results = {
+        "method": method,
+        "all_coverage": dict(all_coverage),
+        "all_q_hats": dict(all_q_hats),
+        "all_set_sizes": dict(all_set_sizes),
+    }
 
-    # TODO: Save results to file and pickle
-    a = 3
+    if method == "non_exchangeable_conformal_nucleus_sampling":
+        results["all_distances"] = dict(all_distances)
+        results["all_weights"] = dict(all_weights)
+
+    # Save results to pickle
+    file_name = f"{timestamp}_{dataset}_{method}_{conformity_score}_{alpha}_shift.pkl"
+
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+
+    with open(os.path.join(result_dir, file_name), "wb") as result_file:
+        dill.dump(results, result_file)
 
 
 if __name__ == "__main__":
