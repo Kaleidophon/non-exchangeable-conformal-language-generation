@@ -351,7 +351,7 @@ if __name__ == "__main__":
         default=TEMPERATURE
     )
     parser.add_argument(
-        "--softmax_temperature",
+        "--softmax-temperature",
         type=float,
         default=1
     )
