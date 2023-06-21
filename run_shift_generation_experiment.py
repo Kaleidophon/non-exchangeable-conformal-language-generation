@@ -13,22 +13,23 @@ from typing import Optional, Tuple, List
 # EXT
 from codecarbon import OfflineEmissionsTracker
 import dill
-from einops import rearrange
 import numpy as np
 import torch
-import torch.nn.functional as F
+import types
 from tqdm import tqdm
 from transformers import M2M100PreTrainedModel, OPTPreTrainedModel
+from transformers.generation import SampleEncoderDecoderOutput, SampleDecoderOnlyOutput
 
 # PROJECT
-from src.conformal import ConformalCalibrator, ConformalLogitProcessor
+from src.conformal import ConformalCalibrator, ConformalLogitProcessor, NonExchangeableConformalLogitProcessor
 from src.custom_types import Device
-from src.data import load_data
+from src.data import load_data, SUFFIX
 from src.datastore import DataStore
 from src.defaults import (
     BATCH_SIZE, SEQUENCE_LENGTH, SEED, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME,
     ALPHA, TEMPERATURE, NUM_NEIGHBORS, RESULT_DIR, MODEL_HIDDEN_SIZES, HF_RESOURCES, DATASET_TASKS
 )
+from src.evaluation import evaluate_translation_model, evaluate_generation_model
 from src.utils import shard_model
 
 # GLOBALS
@@ -52,6 +53,7 @@ def perform_shift_experiment(
     temperature: float,
     data_dir: str,
     result_dir: str,
+    softmax_temperature: float,
     # Arguments for conformal sampling methods
     alpha: Optional[float] = None,
     data_store: Optional[DataStore] = None,
@@ -61,7 +63,6 @@ def perform_shift_experiment(
     # Other arguments
     seed: int = SEED,
     device: Device = "cpu",
-    ignore_token_ids: Tuple[int] = (1, 2),
     sharding: Optional[List[int]] = None,
 ):
     # Set seed
@@ -96,31 +97,82 @@ def perform_shift_experiment(
         padding="max_length",
         max_length=SEQUENCE_LENGTH,
         truncation=True,
-        load_splits=("test",)
+        load_splits=("test",),
+        use_ravfogel_prompt=(task == "lm")
     )["test"]
     model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
 
-    calibrator = ConformalCalibrator(
-        alpha=alpha, temperature=temperature, device=device
-    )
+    if softmax_temperature is None:
+        softmax_temperature = 1
 
-    if method in ("conformal_nucleus_sampling", "non_conformal_nucleus_sampling"):
-        if method == "conformal_nucleus_sampling":
-            logit_processor = ConformalLogitProcessor(
-                alpha, conformity_score, data_store, calibrator
+    generation_config = {
+        "max_length": model.config.max_length,
+        "do_sample": True,
+        "num_beams": 1,
+        "temperature": softmax_temperature,
+        "early_stopping": True,
+    }
+
+    if task == "mt":
+        generation_config["forced_bos_token_id"] = tokenizer.get_lang_id(tgt_lang)
+        generation_config["num_beams"] = 1
+
+    # That is actually not how Ravfogel et al. generate
+    else:
+        del generation_config["max_length"]
+        generation_config["max_new_tokens"] = 350
+
+    # ### Add custom arguments to geeneration config depending on method being used ###
+    if method == "nucleus_sampling":
+        generation_config["top_p"] = 1 - alpha
+
+    # Prepare conformal sampling methods
+    elif method in ("conformal_nucleus_sampling", "non_exchangeable_nucleus_sampling"):
+        assert data_store is not None, "Data store must be provided for conformal sampling methods"
+        assert alpha is not None, "alpha must be specified for conformal sampling methods"
+
+        calibrator = ConformalCalibrator(
+            alpha=alpha, temperature=temperature, device=device
+        )
+
+        # To assess the impact of the weights / neighbor retrieval, also test a variant with constant weights
+        if method == "constant_non_exchangeable_nucleus_sampling":
+            dummy_compute_weights = lambda distances: torch.ones_like(distances)
+            calibrator.compute_weights = types.MethodType(dummy_compute_weights, calibrator)
+
+        # Init logit processor
+        if method in ("non_exchangeable_nucleus_sampling", "constant_non_exchangeable_nucleus_sampling"):
+            generation_config["output_hidden_states"] = True
+            generation_config["return_dict_in_generate"] = True
+
+            logit_processor = NonExchangeableConformalLogitProcessor(
+                data_store=data_store, conformity_score=conformity_score,
+                calibrator=calibrator, distance_type=distance_type,
+                num_neighbors=num_neighbors
             )
+            model = logit_processor.patch_model(model)
+
+        # For the conformal nucleus sampling, just compute one global quantile
+        elif method == "conformal_nucleus_sampling":
+
+            logit_processor = ConformalLogitProcessor(
+                alpha=alpha,
+                conformity_score=conformity_score,
+                calibrator=calibrator,
+                data_store=data_store,
+            )
+
+            del data_store
+
+        generation_config["logits_processor"] = [logit_processor]
+
+    # Generate translations according to specified method
+    generations = defaultdict(list)
 
     # Define noise parameters
     noise_parameters = [
         None, (0, 0.1), (0, 0.2), (0, 0.3), (0, 0.4), (0, 0.5)
     ]
-
-    # Define which information to save
-    all_set_sizes = defaultdict(list)
-    all_coverage = defaultdict(list)
-    all_distances = defaultdict(list)
-    all_weights = defaultdict(list)
-    all_q_hats = defaultdict(list)
 
     for noise_params in noise_parameters:
 
@@ -154,7 +206,6 @@ def perform_shift_experiment(
             with torch.no_grad():
 
                 input_ids = batch["input_ids"].to(device)
-                labels = batch["labels"].to(device)
 
                 # For OPT model, add noise to embeddings
                 if noise_params is not None and isinstance(model, OPTPreTrainedModel):
@@ -174,123 +225,59 @@ def perform_shift_experiment(
                     forward_kwargs["decoder_input_ids"] = decoder_token_ids
                     forward_kwargs["input_ids"] = input_ids
 
-                outputs = model.forward(**forward_kwargs)
-
-            if isinstance(model, M2M100PreTrainedModel):
-                hidden_states = outputs.decoder_hidden_states[-1]
-
-            else:
-                hidden_states = outputs.hidden_states[-1]
-
-            predictions = F.softmax(outputs.logits, dim=-1)
-
-            # Reshape and filter out ignore tokens
-            hidden_states = rearrange(hidden_states, "b s h -> (b s) h")
-            predictions = rearrange(predictions, "b s c -> (b s) c")
-            input_ids = rearrange(input_ids, "b s -> (b s)")
-            labels = rearrange(labels, "b s -> (b s)")
-            mask = torch.all(
-                torch.stack([input_ids != ignore_id for ignore_id in ignore_token_ids], dim=0), dim=0
-            ).to(device)
-            hidden_states = hidden_states[mask]
-
-            if distance_type == "inner_product":
-                hidden_states /= model_hidden_size ** 0.25
-
-            elif distance_type == "cosine":
-                hidden_states = F.normalize(hidden_states, p=2, dim=-1)
-
-            if len(hidden_states) == 0:
-                continue
-
-            predictions = predictions[mask]
-            labels = labels[mask]
-
-            # Apply one of three different methods here:
-            #   1. "Classic" nucleus sampling: Include everything in the prediction set that corresponds to 1 - alpha
-            #       cumulative probability mass
-            #   2. Conformal nucleus sampling: Include everything in the prediction set according to the q hat
-            #       corresponding to the current entropy bin.
-            #   3. Non-exchangeable conformal nucleus sampling: Retrieve neighbors and compute q hat based on their
-            #       weighted conformity scores.
-
-            # Run the classic nucleus sampling
-            if method == "nucleus_sampling":
-                top_p = q_hat = torch.FloatTensor([1 - alpha]).repeat(predictions.shape[0])
-
-                prediction_sets, set_sizes = calibrator.get_prediction_sets(
-                    conformity_score, predictions, q_hat=top_p
+                outputs = model.generate(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    **generation_config
                 )
 
-            elif method == "conformal_nucleus_sampling":
-                q_hat = logit_processor.get_q_hats(predictions)
+                # For the non-exchangeable conformal sampling
+                if isinstance(outputs, SampleEncoderDecoderOutput) or isinstance(outputs, SampleDecoderOnlyOutput):
+                    outputs = outputs.sequences
 
-                prediction_sets, set_sizes = calibrator.get_prediction_sets(
-                    conformity_score, predictions, q_hat=q_hat
-                )
+                outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-            # Run the non-exchangeable conformal prediction
-            elif method == "non_exchangeable_conformal_nucleus_sampling":
-                set_sizes = []
-                q_hat = []
-                distances = []
-                weights = []
-                prediction_sets = []
+                # Truncate to 200 words for language modeling (Ravfogel et al. setup)
+                if task == "lm":
+                    outputs = [" ".join(out.split()[:200]) for out in outputs]
 
-                # This can be hard on memory so we do it in batches
-                for i in range(0, len(hidden_states), 1):
-                    batch_distances, batch_conformity_scores = data_store.search_k(
-                        hidden_states[i:i + 1, :], k=num_neighbors
-                    )
+                generations[noise_params] += outputs
 
-                    batch_weights = calibrator.compute_weights(batch_distances)
-                    conformal_results = calibrator.compute_q_hat(
-                        batch_weights, batch_conformity_scores
-                    )
-                    batch_q_hat = conformal_results["q_hat"]
-                    batch_prediction_sets, batch_set_sizes = calibrator.get_prediction_sets(
-                        conformity_score, predictions[i, :].unsqueeze(0), batch_q_hat
-                    )
+    del data_loader  # Delete data loader to free up memory
+    del model  # Delete model to free up memory
 
-                    prediction_sets.append(batch_prediction_sets)
-                    set_sizes.append(batch_set_sizes)
-                    q_hat.append(batch_q_hat)
-                    distances.append(batch_distances)
-                    weights.append(batch_weights)
+    if task == "mt":
+        src_abbr = src_lang[:2]
+        tgt_abbr = tgt_lang[:2]
+        source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
+        reference_path = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
 
-                prediction_sets = torch.cat(prediction_sets, dim=0)
-                set_sizes = np.concatenate(set_sizes, axis=0)
-                q_hat = torch.cat(q_hat, dim=0)
-                distances = torch.cat(distances, dim=0)
-                weights = torch.cat(weights, dim=0)
+        generation_results = {
+            noise_params: evaluate_translation_model(
+                noise_generations, source_file, reference_path,
+                device=device, metrics=("bleu",)
+            )
+            for noise_params, noise_generations in generations.items()
+        }
 
-            # Evaluate
-            label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
-            is_covered = list((label_probs > 0).float().cpu().numpy())
-            all_coverage[noise_params] += is_covered
-            all_q_hats[noise_params] += list(q_hat.cpu().numpy())
-            all_set_sizes[noise_params] += list(set_sizes)
+    elif task == "lm":
+        reference_path = f"{data_dir}/{dataset}/references.txt"
 
-            # Add results for this batch
-            if method == "non_exchangeable_conformal_nucleus_sampling":
-                all_distances[noise_params] += list(distances.mean(dim=-1).cpu().numpy())
-                all_weights[noise_params] += list(weights.mean(dim=-1).cpu().numpy())
-
+        generation_results = {
+            noise_params: evaluate_generation_model(
+                noise_generations, reference_path, device=device, metrics=("mauve",)
+            )
+            for noise_params, noise_generations in generations.items()
+        }
 
     # Collect results
     results = {
         "method": method,
-        "all_coverage": dict(all_coverage),
-        "all_q_hats": dict(all_q_hats),
-        "all_set_sizes": dict(all_set_sizes),
+        **generation_results,
     }
 
-    if method == "non_exchangeable_conformal_nucleus_sampling":
-        results["all_distances"] = dict(all_distances)
-        results["all_weights"] = dict(all_weights)
-
     # Save results to pickle
-    file_name = f"{timestamp}_{dataset}_{method}_{conformity_score}_{alpha}_shift.pkl"
+    file_name = f"{timestamp}_{dataset}_{method}_{conformity_score}_{alpha}_shift_generations.pkl"
 
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
@@ -364,6 +351,11 @@ if __name__ == "__main__":
         default=TEMPERATURE
     )
     parser.add_argument(
+        "--softmax_temperature",
+        type=float,
+        default=1
+    )
+    parser.add_argument(
         "--alpha",
         type=float,
         default=ALPHA
@@ -424,6 +416,7 @@ if __name__ == "__main__":
             temperature=args.temperature,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
+            softmax_temperature=args.softmax_temperature,
             alpha=args.alpha,
             num_neighbors=args.num_neighbors,
             data_store=data_store,

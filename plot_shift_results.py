@@ -24,7 +24,8 @@ MAX_SET_SIZES = {
 }
 PLOT_TITLES = {
     "all_coverage": "Coverage",
-    "all_set_sizes": "Set Size as % of Vocabulary",
+    "all_set_sizes": "Set Size as \% of Vocabulary",
+    "all_q_hats": r"$\hat{q}$",
 }
 METHOD_LABELS = {
     "nucleus_sampling": "Nucleus Sampling",
@@ -55,9 +56,11 @@ def plot_coverage_results(
             results[method]["all_set_sizes"][noise] = np.mean(
                 np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]
             )
+            results[method]["all_q_hats"][noise] = np.mean(results[method]["all_q_hats"][noise])
 
     # Plot results
-    fig, axes = plt.subplots(1, 2, figsize=(10, 2))
+    plt.rcParams['text.usetex'] = True
+    fig, axes = plt.subplots(1, 3, figsize=(10, 2))
     num_noises = len(results[list(results.keys())[0]])
     noises = list(results[list(results.keys())[0]]["all_coverage"].keys())
     noise_labels = [
@@ -65,7 +68,8 @@ def plot_coverage_results(
         for noise in noises
     ]
 
-    for key, ax in zip(["all_coverage", "all_set_sizes"], axes):
+    # TODO: Plot generation results
+    for key, ax in zip(["all_coverage", "all_set_sizes", "all_q_hats"], axes):
         ax.grid(axis="both", which="major", linestyle=":", color="grey")
         ax.set_title(PLOT_TITLES[key], fontsize=12)
         x = np.linspace(1, num_noises, num_noises)
@@ -88,8 +92,20 @@ def plot_coverage_results(
 
     axes[-1].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
-    plt.show()
+    fig.tight_layout()
 
+    if not save_path:
+        plt.show()
+
+    else:
+        plt.savefig(
+            save_path,
+            format="pdf",
+            dpi=300,
+            bbox_inches="tight",
+        )
+
+    plt.close()
 
 
 if __name__ == "__main__":
