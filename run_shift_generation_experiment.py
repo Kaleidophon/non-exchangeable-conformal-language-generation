@@ -255,7 +255,7 @@ def perform_shift_experiment(
         generation_results = {
             noise_params: evaluate_translation_model(
                 noise_generations, source_file, reference_path,
-                device=device, metrics=("bleu",)
+                device=device, metrics=("bleu",), use_mbr=False
             )
             for noise_params, noise_generations in generations.items()
         }
