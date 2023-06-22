@@ -231,10 +231,18 @@ def plot_conditional_coverage(
     # Compute expected coverage gap
     num_points = sum(bin_sizes)
     bin_coverages = np.array(bin_coverages)
-    bin_coverages[np.isnan(bin_coverages)] = 0
+    bin_sizes = np.array(bin_sizes)
+    mask = ~np.isnan(bin_coverages)
+    bin_coverages = bin_coverages[mask]
+    bin_sizes = bin_sizes[mask]
     cmp = np.zeros(len(bin_coverages))
     gaps = 1 - alpha - np.array(bin_coverages)
     expected_coverage_gap = np.sum(bin_sizes / num_points * np.max(np.stack([cmp, gaps]), 0), axis=0)
+    print("Expected coverage gap:", expected_coverage_gap)
+
+    # Compute size-stratified coverage
+    ssc = np.min(bin_coverages, axis=0)
+    print("Size-stratified coverage:", ssc)
 
     return expected_coverage_gap
 
@@ -326,9 +334,5 @@ if __name__ == "__main__":
         choices=["neighbors", "alpha", "temperature"]
     )
     args = parser.parse_args()
-
-    if args.save_path is not None:
-        if not os.path.exists(args.save_path):
-            os.makedirs(args.save_path)
 
     plot_coverage_results(args.result_files, args.plot_by, args.save_path)

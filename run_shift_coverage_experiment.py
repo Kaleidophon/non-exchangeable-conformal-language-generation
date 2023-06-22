@@ -112,7 +112,7 @@ def perform_shift_experiment(
 
     # Define noise parameters
     noise_parameters = [
-        None, (0, 0.1), (0, 0.2), (0, 0.3), (0, 0.4), (0, 0.5)
+        None, (0, 0.025), (0, 0.05), (0, 0.075), (0, 0.1)
     ]
 
     # Define which information to save
