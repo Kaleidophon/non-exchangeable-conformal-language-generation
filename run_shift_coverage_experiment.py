@@ -121,6 +121,7 @@ def perform_shift_experiment(
     all_distances = defaultdict(list)
     all_weights = defaultdict(list)
     all_q_hats = defaultdict(list)
+    all_entropies = defaultdict(list)
 
     for noise_params in noise_parameters:
 
@@ -183,10 +184,12 @@ def perform_shift_experiment(
                 hidden_states = outputs.hidden_states[-1]
 
             predictions = F.softmax(outputs.logits, dim=-1)
+            entropies = -torch.sum(predictions * torch.log(predictions), dim=-1)
 
             # Reshape and filter out ignore tokens
             hidden_states = rearrange(hidden_states, "b s h -> (b s) h")
             predictions = rearrange(predictions, "b s c -> (b s) c")
+            entropies = rearrange(entropies, "b s -> (b s)")
             input_ids = rearrange(input_ids, "b s -> (b s)")
             labels = rearrange(labels, "b s -> (b s)")
             mask = torch.all(
@@ -205,6 +208,7 @@ def perform_shift_experiment(
 
             predictions = predictions[mask]
             labels = labels[mask]
+            entropies = entropies[mask]
 
             # Apply one of three different methods here:
             #   1. "Classic" nucleus sampling: Include everything in the prediction set that corresponds to 1 - alpha
@@ -270,6 +274,7 @@ def perform_shift_experiment(
             all_coverage[noise_params] += is_covered
             all_q_hats[noise_params] += list(q_hat.cpu().numpy())
             all_set_sizes[noise_params] += list(set_sizes)
+            all_entropies[noise_params] += list(entropies.cpu().numpy())
 
             # Add results for this batch
             if method == "non_exchangeable_conformal_nucleus_sampling":
@@ -283,6 +288,7 @@ def perform_shift_experiment(
         "all_coverage": dict(all_coverage),
         "all_q_hats": dict(all_q_hats),
         "all_set_sizes": dict(all_set_sizes),
+        "all_entropies": dict(all_entropies),
     }
 
     if method == "non_exchangeable_conformal_nucleus_sampling":

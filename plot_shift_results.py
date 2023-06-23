@@ -39,7 +39,7 @@ METHOD_LABELS = {
 def plot_coverage_results(
     coverage_result_files: List[str],
     generation_result_files: List[str],
-    save_path: Optional[str] = None
+    save_dir: Optional[str] = None
 ):
     results = {}
 
@@ -52,20 +52,37 @@ def plot_coverage_results(
         with open(file_path, "rb") as file:
             results[method] = dill.load(file)
 
+    # Save for scatter plots later
+    noises = list(results[list(results.keys())[0]]["all_coverage"].keys())
+    non_ex_distances = {
+        noise: np.array(results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise])
+        for noise in noises
+    }
+    non_ex_q_hats = {
+        noise: np.array(results["non_exchangeable_conformal_nucleus_sampling"]["all_q_hats"][noise])
+        for noise in noises
+    }
+    non_ex_set_sizes = {
+        noise: np.array(results["non_exchangeable_conformal_nucleus_sampling"]["all_set_sizes"][noise]) #/ MAX_SET_SIZES[dataset]
+        for noise in noises
+    }
+
     # Preprocess results
-    for method in results:
-        for noise in results[method]["all_coverage"]:
-            results[method]["all_coverage"][noise] = (
-                np.mean(results[method]["all_coverage"][noise]),
-                np.std(results[method]["all_coverage"][noise])
+    from copy import deepcopy
+    plot_results = deepcopy(results)
+    for method in plot_results:
+        for noise in plot_results[method]["all_coverage"]:
+            plot_results[method]["all_coverage"][noise] = (
+                np.mean(plot_results[method]["all_coverage"][noise]),
+                np.std(plot_results[method]["all_coverage"][noise])
             )
-            results[method]["all_set_sizes"][noise] = (
-                np.mean(np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]),
-                np.std(np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset])
+            plot_results[method]["all_set_sizes"][noise] = (
+                np.mean(np.array(plot_results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]),
+                np.std(np.array(plot_results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset])
             )
-            results[method]["all_q_hats"][noise] = (
-                np.mean(results[method]["all_q_hats"][noise]),
-                np.std(results[method]["all_q_hats"][noise])
+            plot_results[method]["all_q_hats"][noise] = (
+                np.mean(plot_results[method]["all_q_hats"][noise]),
+                np.std(plot_results[method]["all_q_hats"][noise])
             )
 
     # Load generation results
@@ -77,7 +94,7 @@ def plot_coverage_results(
 
         with open(file_path, "rb") as file:
             generation_results = dill.load(file)
-            results[method]["all_generation_results"] = {
+            plot_results[method]["all_generation_results"] = {
                 key: val_dict[perf_key]
                 for key, val_dict in generation_results.items()
                 if key != "method"
@@ -86,7 +103,6 @@ def plot_coverage_results(
     # Plot results
     plt.rcParams['text.usetex'] = True
     fig, axes = plt.subplots(1, 4, figsize=(10, 2))
-    noises = list(results[list(results.keys())[0]]["all_coverage"].keys())
     num_noises = len(noises)
     noise_labels = [
         "None" if noise is None else str(noise[1])
@@ -112,11 +128,11 @@ def plot_coverage_results(
             marker, size, color = MARKERS_AND_COLORS[method]
 
             if key == "all_generation_results":
-                means = [results[method][key][noise] for noise in noises]
+                means = [plot_results[method][key][noise] for noise in noises]
                 stds = None
 
             else:
-                means, stds = zip(*[results[method][key][noise] for noise in noises])
+                means, stds = zip(*[plot_results[method][key][noise] for noise in noises])
 
                 # Cap std to stay within [0, 1]
                 stds = np.array(stds)
@@ -151,12 +167,12 @@ def plot_coverage_results(
 
     fig.tight_layout()
 
-    if not save_path:
+    if not save_dir:
         plt.show()
 
     else:
         plt.savefig(
-            save_path,
+            f"{save_dir}/results.pdf",
             bbox_extra_artists=(legend,),
             format="pdf",
             dpi=300,
@@ -164,6 +180,35 @@ def plot_coverage_results(
         )
 
     plt.close()
+
+    # Plot scatter plots for non-exchangeable method
+    plt.rcParams['text.usetex'] = True
+    fig = plt.figure(figsize=(8, 8))
+    ax = plt.gca()
+    ax.grid(axis="both", which="major", linestyle=":", color="grey")
+    from scipy.stats import spearmanr
+
+    for method in results.keys():
+
+        for noise in noises:
+            print(noise)
+            #non_ex_distances = results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise]
+            #print(
+            #    method, spearmanr(
+            #        results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise],
+            #        results[method]["all_q_hats"][noise]
+            #    )
+            #)
+
+            print(
+                method, spearmanr(
+                    results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise],
+                    results[method]["all_set_sizes"][noise]
+                )
+            )
+
+    #plt.legend()
+    #plt.show()
 
 
 if __name__ == "__main__":
@@ -179,11 +224,14 @@ if __name__ == "__main__":
         nargs="+"
     )
     parser.add_argument(
-        "--save-path",
+        "--save-dir",
         type=str,
         default=None
     )
 
     args = parser.parse_args()
 
-    plot_coverage_results(args.coverage_result_files, args.generation_result_files, args.save_path)
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+
+    plot_coverage_results(args.coverage_result_files, args.generation_result_files, args.save_dir)
