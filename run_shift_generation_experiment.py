@@ -173,7 +173,7 @@ def perform_shift_experiment(
     noise_parameters = [
         None, (0, 0.025), (0, 0.05), (0, 0.075), (0, 0.1)
     ]
-    
+
     for noise_params in noise_parameters:
 
         if noise_params is not None and isinstance(model, M2M100PreTrainedModel):

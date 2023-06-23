@@ -145,7 +145,6 @@ def evaluate_generations(
     # ### Add custom arguments to geeneration config depending on method being used ###
     if generation_method == "beam_search":
         assert num_beams is not None, "num_beams must be specified for beam search"
-        assert task == "mt", "Beam search is only supported for machine translation"
         generation_config["num_beams"] = num_beams
         generation_config["do_sample"] = False
 
