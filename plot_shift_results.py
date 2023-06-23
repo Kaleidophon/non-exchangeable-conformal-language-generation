@@ -55,11 +55,18 @@ def plot_coverage_results(
     # Preprocess results
     for method in results:
         for noise in results[method]["all_coverage"]:
-            results[method]["all_coverage"][noise] = np.mean(results[method]["all_coverage"][noise])
-            results[method]["all_set_sizes"][noise] = np.mean(
-                np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]
+            results[method]["all_coverage"][noise] = (
+                np.mean(results[method]["all_coverage"][noise]),
+                np.std(results[method]["all_coverage"][noise])
             )
-            results[method]["all_q_hats"][noise] = np.mean(results[method]["all_q_hats"][noise])
+            results[method]["all_set_sizes"][noise] = (
+                np.mean(np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]),
+                np.std(np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset])
+            )
+            results[method]["all_q_hats"][noise] = (
+                np.mean(results[method]["all_q_hats"][noise]),
+                np.std(results[method]["all_q_hats"][noise])
+            )
 
     # Load generation results
     perf_key = "mauve" if dataset == "openwebtext" else "bleu"
@@ -101,16 +108,32 @@ def plot_coverage_results(
         if key == "all_coverage":
             ax.axhline(y=0.9, color='gray', linestyle='--', alpha=0.8)
 
-        for method in results:
+        for method, offset in zip(results, [-0.025, 0, 0.025]):
             marker, size, color = MARKERS_AND_COLORS[method]
 
-            ax.plot(
+            if key == "all_generation_results":
+                means = [results[method][key][noise] for noise in noises]
+                stds = None
+
+            else:
+                means, stds = zip(*[results[method][key][noise] for noise in noises])
+
+                # Cap std to stay within [0, 1]
+                stds = np.array(stds)
+                means = np.array(means)
+                stds[means + stds > 1] = 1 - means[means + stds > 1]
+                stds[means - stds < 0] = means[means - stds < 0]
+
+            ax.errorbar(
                 x,
-                [results[method][key][noise] for noise in noises],
+                means,
+                capsize=5,
+                elinewidth=1,
+                yerr=stds,
                 marker=marker,
                 markersize=size,
                 label=METHOD_LABELS[method] if ax == axes[-1] else None,
-                alpha=0.75,
+                alpha=0.6,
                 color=color
             )
 
