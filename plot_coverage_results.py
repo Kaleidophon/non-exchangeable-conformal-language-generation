@@ -26,6 +26,13 @@ LABEL_MAPPING = {
 }  # Map results to x-labels for nicer plots
 
 
+MAX_SET_SIZES = {
+    "openwebtext": 50272,
+    "deen": 128112,
+    "jaen": 128112,
+}
+
+
 def plot_coverage_results(
     result_files: List[str], plot_by: str, save_path: str,
     plot_results: Iterable[str] = (
@@ -191,6 +198,8 @@ def plot_conditional_coverage(
         bins[1:], bin_coverages,
         label="Conditional Coverage", linestyle="--", marker="o", alpha=0.6, markersize=5, linewidth=2
     )
+    ax1.set_ylim([0.2, 1])
+    ax1.set_xlim([0, 128112])  # TODO: Make this automatic
 
     # Plot number of points ber bin
     bin_sizes = [

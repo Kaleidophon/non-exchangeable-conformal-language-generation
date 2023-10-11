@@ -86,6 +86,7 @@ def plot_coverage_results(
             )
 
     # Load generation results
+    """
     perf_key = "mauve" if dataset == "openwebtext" else "bleu"
     for file_path in generation_result_files:
         dataset, method = re.compile(
@@ -99,24 +100,25 @@ def plot_coverage_results(
                 for key, val_dict in generation_results.items()
                 if key != "method"
             }
+    """
 
     # Plot results
     plt.rcParams['text.usetex'] = True
-    fig, axes = plt.subplots(1, 4, figsize=(10, 2))
+    fig, axes = plt.subplots(1, 3, figsize=(10, 2))
     num_noises = len(noises)
     noise_labels = [
         "None" if noise is None else str(noise[1])
         for noise in noises
     ]
 
-    for key, ax in zip(["all_coverage", "all_set_sizes", "all_q_hats", "all_generation_results"], axes):
+    for key, ax in zip(["all_coverage", "all_set_sizes", "all_q_hats"], axes):
         ax.grid(axis="both", which="major", linestyle=":", color="grey")
 
-        if key == "all_generation_results":
-            title = perf_key.upper()
+        #if key == "all_generation_results":
+        #    title = perf_key.upper()
 
-        else:
-            title = PLOT_TITLES[key]
+        ##else:
+        title = PLOT_TITLES[key]
 
         ax.set_title(title, fontsize=12)
         x = np.linspace(1, num_noises, num_noises)
@@ -156,7 +158,13 @@ def plot_coverage_results(
         ax.set_xticks(x)
         ax.set_xticklabels(noise_labels)
 
+    handles, labels = axes[-1].get_legend_handles_labels()
+    # remove the errorbars
+    handles = [h[0] for h in handles]
+    # use them in the legend
+
     legend = fig.legend(
+        handles, labels,
         loc="lower center",
         ncol=5,
         fontsize=12,
@@ -182,34 +190,19 @@ def plot_coverage_results(
     plt.close()
 
     # Plot scatter plots for non-exchangeable method
-    plt.rcParams['text.usetex'] = True
-    fig = plt.figure(figsize=(8, 8))
-    ax = plt.gca()
-    ax.grid(axis="both", which="major", linestyle=":", color="grey")
-    from scipy.stats import spearmanr
+    from scipy.stats import pearsonr
 
     for method in results.keys():
 
         for noise in noises:
-            print(noise)
-            #non_ex_distances = results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise]
-            #print(
-            #    method, spearmanr(
-            #        results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise],
-            #        results[method]["all_q_hats"][noise]
-            #    )
-            #)
-
+            print(method, noise)
+            print(np.mean(results[method]["all_entropies"][noise]))
             print(
-                method, spearmanr(
-                    results["non_exchangeable_conformal_nucleus_sampling"]["all_distances"][noise],
-                    results[method]["all_set_sizes"][noise]
+                pearsonr(
+                    results[method]["all_entropies"][noise],
+                    np.array(results[method]["all_set_sizes"][noise]) / MAX_SET_SIZES[dataset]
                 )
             )
-
-    #plt.legend()
-    #plt.show()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
