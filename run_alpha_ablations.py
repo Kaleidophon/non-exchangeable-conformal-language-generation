@@ -245,7 +245,10 @@ def run_alpha_ablation_study(
             flattened_set_sizes = [size for seq_set_sizes in all_set_sizes for size in seq_set_sizes]
             coverage_percentage = np.mean(flattened_coverage)
             print(f"Coverage: {coverage_percentage:.4f}")
-            compute_results(coverage=flattened_coverage, set_sizes=flattened_set_sizes, alpha=alpha)
+            compute_results(
+                coverage=flattened_coverage, set_sizes=flattened_set_sizes, alpha=alpha,
+                max_set_size=predictions.shape[-1]
+            )
 
             results = {
                 "coverage": coverage,
@@ -268,8 +271,10 @@ def run_alpha_ablation_study(
                 dill.dump(results, result_file)
 
 
-def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75):
-    max_set_size = max(set_sizes)
+def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75, max_set_size = None):
+
+    if max_set_size is None:
+        max_set_size = max(set_sizes)
 
     step = max_set_size / num_bins
     bins = np.arange(1, max_set_size + step, step)
