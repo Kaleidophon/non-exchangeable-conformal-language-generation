@@ -216,9 +216,9 @@ def run_alpha_ablation_study(
                     distances.append(batch_distances)
                     conformity_scores.append(batch_conformity_scores)
 
-                    distances = torch.cat(distances, dim=0)
-                    conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-                    
+                distances = torch.cat(distances, dim=0)
+                conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
+
                 weights = calibrator.compute_weights(distances)
                 conformal_results = calibrator.compute_q_hat(
                     weights, conformity_scores
