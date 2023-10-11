@@ -242,9 +242,10 @@ def run_alpha_ablation_study(
 
             # Save results
             flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
+            flattened_set_sizes = [size for seq_set_sizes in all_set_sizes for size in seq_set_sizes]
             coverage_percentage = np.mean(flattened_coverage)
             print(f"Coverage: {coverage_percentage:.4f}")
-            compute_results(coverage=flattened_coverage, set_sizes=all_set_sizes, alpha=alpha)
+            compute_results(coverage=flattened_coverage, set_sizes=flattened_set_sizes, alpha=alpha)
 
             results = {
                 "coverage": coverage,
@@ -285,6 +286,7 @@ def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75):
     ]
     # Compute average set size
     print("Average set size:", np.mean(set_sizes))
+    print("Average set (%):", np.mean(set_sizes) / max_set_size)
 
     # Compute expected coverage gap
     num_points = sum(bin_sizes)
