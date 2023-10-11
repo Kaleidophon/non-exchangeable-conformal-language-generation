@@ -244,6 +244,7 @@ def run_alpha_ablation_study(
             flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
             coverage_percentage = np.mean(flattened_coverage)
             print(f"Coverage: {coverage_percentage:.4f}")
+            compute_results(coverage=flattened_coverage, set_sizes=all_set_sizes, alpha=alpha)
 
             results = {
                 "coverage": coverage,
@@ -264,6 +265,42 @@ def run_alpha_ablation_study(
 
             with open(os.path.join(result_dir, file_name), "wb") as result_file:
                 dill.dump(results, result_file)
+
+
+def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75):
+    max_set_size = max(set_sizes)
+
+    step = max_set_size / num_bins
+    bins = np.arange(1, max_set_size + step, step)
+
+    bin_indices = np.digitize(set_sizes, bins, right=True)
+
+    bin_coverages = [
+        np.mean(np.array(coverage)[bin_indices == i]) for i in range(1, len(bins))
+    ]
+
+    # Plot number of points ber bin
+    bin_sizes = [
+        np.sum((bin_indices == i).astype(int)) for i in range(1, len(bins))
+    ]
+    # Compute average set size
+    print("Average set size:", np.mean(set_sizes))
+
+    # Compute expected coverage gap
+    num_points = sum(bin_sizes)
+    bin_coverages = np.array(bin_coverages)
+    bin_sizes = np.array(bin_sizes)
+    mask = ~np.isnan(bin_coverages)
+    bin_coverages = bin_coverages[mask]
+    bin_sizes = bin_sizes[mask]
+    cmp = np.zeros(len(bin_coverages))
+    gaps = 1 - alpha - np.array(bin_coverages)
+    expected_coverage_gap = np.sum(bin_sizes / num_points * np.max(np.stack([cmp, gaps]), 0), axis=0)
+    print("Expected coverage gap:", expected_coverage_gap)
+
+    # Compute size-stratified coverage
+    ssc = np.min(bin_coverages, axis=0)
+    print("Size-stratified coverage:", ssc)
 
 
 if __name__ == "__main__":
