@@ -31,6 +31,7 @@ from src.utils import shard_model
 
 # GLOBALS
 SECRET_IMPORTED = False
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Knockknock support
 try:
@@ -40,11 +41,6 @@ try:
 
 except ImportError:
     pass
-
-
-# CUDA
-if torch.cuda.is_available():
-    torch.backends.cudnn.benchmark = True
 
 
 def run_alpha_ablation_study(
@@ -57,7 +53,11 @@ def run_alpha_ablation_study(
     distance_type: str,
     temperature: float,
     num_neighbors: int,
-    data_store: DataStore,
+    datastore_dir: str,
+    num_centroids: int,
+    code_size: int,
+    num_probes: int,
+    use_quantization: bool,
     device: Device,
     data_dir: str,
     result_dir: str,
@@ -126,6 +126,15 @@ def run_alpha_ablation_study(
         calibrator = ConformalCalibrator(
             alpha=alpha, temperature=temperature, device=device
         )
+
+        data_store = DataStore(
+            key_dim=model_hidden_size, value_dim=1,
+            distance_type=distance_type,
+            num_centroids=num_centroids, code_size=code_size,
+            num_probes=num_probes, use_quantization=use_quantization,
+            device=device
+        )  # Create empty data store
+        data_store.load(datastore_dir)  # Load in contents
 
         # Use calibration data store to test coverage on test set
         # Also collect the following statistics and save them with dill to plot later:
@@ -369,16 +378,6 @@ if __name__ == "__main__":
         tracker.start()
 
     try:
-
-        data_store = DataStore(
-            key_dim=MODEL_HIDDEN_SIZES[args.model_identifier], value_dim=1,
-            distance_type=args.distance_type,
-            num_centroids=args.num_centroids, code_size=args.code_size,
-            num_probes=args.num_probes, use_quantization=args.use_quantization,
-            device=args.device
-        )  # Create empty data store
-        data_store.load(args.datastore_dir)  # Load in contents
-
         run_alpha_ablation_study(
             model_identifier=args.model_identifier,
             alpha_values=args.alpha_values,
@@ -389,7 +388,11 @@ if __name__ == "__main__":
             distance_type=args.distance_type,
             temperature=args.temperature,
             num_neighbors=args.num_neighbors,
-            data_store=data_store,
+            datastore_dir=args.datastore_dir,
+            use_quantization=args.use_quantization,
+            num_centroids=args.num_centroids,
+            code_size=args.code_size,
+            num_probes=args.num_probes,
             device=args.device,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
