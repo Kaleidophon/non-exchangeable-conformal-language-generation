@@ -48,7 +48,6 @@ def run_alpha_ablation_study(
     alpha_values: List[float],
     dataset: str,
     batch_size: int,
-    method: str,
     conformity_method: str,
     distance_type: str,
     temperature: float,
@@ -309,10 +308,10 @@ if __name__ == "__main__":
         default=BATCH_SIZE
     )
     parser.add_argument(
-        "--conformity-score",
+        "--conformity-method",
         type=str,
-        default="adaptive",
-        choices=("simple", "adaptive")
+        choices=("simple", "adaptive"),
+        default="adaptive"
     )
     parser.add_argument(
         "--use-quantization",
