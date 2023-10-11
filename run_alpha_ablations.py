@@ -42,6 +42,11 @@ except ImportError:
     pass
 
 
+# CUDA
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+
+
 def run_alpha_ablation_study(
     model_identifier: str,
     alpha_values: List[float],
