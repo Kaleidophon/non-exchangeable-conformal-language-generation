@@ -383,7 +383,6 @@ if __name__ == "__main__":
             alpha_values=args.alpha_values,
             dataset=args.dataset,
             batch_size=args.batch_size,
-            method=args.method,
             conformity_method=args.conformity_method,
             distance_type=args.distance_type,
             temperature=args.temperature,
