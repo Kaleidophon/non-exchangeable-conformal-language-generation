@@ -263,19 +263,20 @@ def run_experiments(
 
                     distances = torch.cat(distances, dim=0)
                     conformity_scores = torch.cat(conformity_scores, dim=0).squeeze(-1)
-                    weights = calibrator.compute_weights(distances)
-                    conformal_results = calibrator.compute_q_hat(
-                        weights, conformity_scores
-                    )
-                    q_hat = conformal_results["q_hat"]
-                    prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
 
-                    all_set_sizes.append(list(set_sizes))
+                weights = calibrator.compute_weights(distances)
+                conformal_results = calibrator.compute_q_hat(
+                    weights, conformity_scores
+                )
+                q_hat = conformal_results["q_hat"]
+                prediction_sets, set_sizes = calibrator.get_prediction_sets(conformity_method, predictions, q_hat)
 
-                    # Evaluate
-                    label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
-                    is_covered = list((label_probs > 0).float().cpu().numpy())
-                    coverage.append(is_covered)
+                all_set_sizes.append(list(set_sizes))
+
+                # Evaluate
+                label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+                is_covered = list((label_probs > 0).float().cpu().numpy())
+                coverage.append(is_covered)
 
             # Add results for this batch
             if method == "non_exchangeable_conformal_nucleus_sampling":
