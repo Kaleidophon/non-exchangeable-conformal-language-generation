@@ -25,7 +25,7 @@ from src.data import load_data
 from src.datastore import DataStore
 from src.defaults import (
     BATCH_SIZE, DATASETS, MODEL_IDENTIFIER, DATA_DIR, EMISSION_DIR, PROJECT_NAME, RESULT_DIR,
-    TEMPERATURE, NUM_NEIGHBORS, MODEL_HIDDEN_SIZES, SEED, HF_RESOURCES, DATASET_TASKS
+    TEMPERATURE, NUM_NEIGHBORS, SEED, HF_RESOURCES, DATASET_TASKS, MODEL_HIDDEN_SIZES
 )
 from src.utils import shard_model
 
