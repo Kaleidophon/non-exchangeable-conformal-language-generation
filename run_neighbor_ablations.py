@@ -321,7 +321,7 @@ if __name__ == "__main__":
         "--neighbor-nums",
         type=int,
         nargs="+",
-        default=[10, 25, 50, 100, 200, 300, 500]
+        default=[10, 25, 50, 75, 100, 200, 300, 500]
     )
     parser.add_argument(
         "--save-dir",
