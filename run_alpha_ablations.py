@@ -313,11 +313,6 @@ def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75, max_set_siz
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model",
-        type=str,
-        default=MODEL_IDENTIFIER
-    )
-    parser.add_argument(
         "--alpha-values",
         type=float,
         nargs="+",

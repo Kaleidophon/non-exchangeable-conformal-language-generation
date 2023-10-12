@@ -1,5 +1,5 @@
 """
-Conduct experiments for conformal risk control in NLG.
+Conduct experiments to measure to what extend set size is indicative of model error.
 """
 
 # STD
@@ -13,6 +13,9 @@ from codecarbon import OfflineEmissionsTracker
 import dill
 from einops import rearrange
 from knockknock import telegram_sender
+import numpy as np
+from sklearn.metrics import roc_auc_score, average_precision_score
+from scipy.stats import kendalltau, spearmanr
 import torch
 import torch.nn.functional as F
 from transformers import M2M100PreTrainedModel
@@ -132,7 +135,7 @@ def run_experiments(
         truncation=True
     )
     data_loader = data_loaders["test"]
-    model_hidden_size = MODEL_HIDDEN_SIZES[model.config.name_or_path]
+    model_hidden_size = MODEL_HIDDEN_SIZES[model_identifier]
 
     # Load calibration data
     # Init conformal calibrator
@@ -155,20 +158,10 @@ def run_experiments(
                 alpha, conformity_method, data_store, calibrator
             )
 
-    # Use calibration data store to test coverage on test set
-    # Also collect the following statistics and save them with dill to plot later:
-    # - Prediction set sizes
-    # - Distances and weights
-    # - Conformity scores
-    # - Found quantiles q hat
-    # - The effective sample size
+    # Use calibration data store to test set sizes and error on the test set
     all_set_sizes = []
     coverage = []
-    avg_distances = []
-    avg_weights = []
-    avg_conformity_scores = []
-    all_n_effs = []
-    all_q_hats = []
+    all_gold_probs = []
 
     with torch.no_grad():
         for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
@@ -274,41 +267,38 @@ def run_experiments(
             all_set_sizes.append(list(set_sizes))
 
             # Evaluate
+            gold_probs = predictions.gather(-1, labels.unsqueeze(-1))..squeeze(-1)
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
             is_covered = list((label_probs > 0).float().cpu().numpy())
             coverage.append(is_covered)
-
-            # Add results for this batch
-            if method == "non_exchangeable_conformal_nucleus_sampling":
-                avg_distances += list(distances.mean(dim=-1).cpu().numpy())
-                avg_weights += list(weights.mean(dim=-1).cpu().numpy())
-                avg_conformity_scores += list(conformity_scores.mean(dim=-1).cpu().numpy())
-                all_n_effs += list(conformal_results["n_eff"].cpu().numpy())
-                all_q_hats += list(q_hat.cpu().numpy())
+            all_gold_probs.append(gold_probs)
 
         # Save results
         flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
-        import numpy as np
-        coverage_percentage = np.mean(flattened_coverage)
-        print(f"Coverage: {coverage_percentage:.4f}")
+        flattened_set_sizes = [size for seq_set_sizes in all_set_sizes for size in seq_set_sizes]
+        flattened_gold_probs = [gold_prob for seq_gold_probs in all_gold_probs for gold_prob in seq_gold_probs]
+
+        # Compute proxy binary classification task
+        auroc = roc_auc_score(flattened_coverage, flattened_set_sizes)
+        aupr = average_precision_score(flattened_coverage, flattened_set_sizes)
+        print("AUROC", auroc)
+        print("AUPR", aupr)
+
+        # Compute correlations
+        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
+        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
+        print("Spearman's rho", spearmans_rho)
+        print("Kendall's tau", kendalls_tau)
 
         results = {
-            "coverage": coverage,
-            "coverage_percentage": coverage_percentage,
-            "all_set_sizes": all_set_sizes
+            "auroc": auroc,
+            "aupr": aupr,
+            "spearmans_rho": spearmans_rho,
+            "kendalls_tau": kendalls_tau
         }
 
-        if method == "non_exchangeable_conformal_nucleus_sampling":
-            results.update({
-                "avg_distances": avg_distances,
-                "avg_weights": avg_weights,
-                "avg_conformity_scores": avg_conformity_scores,
-                "all_n_effs": all_n_effs,
-                "all_q_hats": all_q_hats,
-            })
-
         timestamp = str(datetime.now().strftime("%d-%m-%Y_(%H:%M:%S)"))
-        file_name = f"{timestamp}_{dataset}_{method}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}_{distance_type}.pkl"
+        file_name = f"uncertainty_{timestamp}_{dataset}_{method}_{conformity_method}_{num_neighbors}_{temperature}_{alpha}_{distance_type}.pkl"
 
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)

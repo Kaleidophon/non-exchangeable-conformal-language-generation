@@ -1,5 +1,5 @@
 """
-Run an ablation study that investigates the impact of alpha.
+Run an ablation study that investigates the impact of the number of neighbors.
 """
 
 # STD
@@ -312,11 +312,6 @@ def compute_results(coverage, set_sizes, alpha = 0.1, num_bins = 75, max_set_siz
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=MODEL_IDENTIFIER
-    )
     parser.add_argument(
         "--neighbor-nums",
         type=int,
