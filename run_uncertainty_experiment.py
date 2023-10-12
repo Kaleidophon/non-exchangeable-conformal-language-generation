@@ -280,8 +280,8 @@ def run_experiments(
 
         # Compute proxy binary classification task
         max_set_size = predictions.shape[-1]
-        auroc = roc_auc_score(np.array(flattened_coverage), 1 - np.array(flattened_set_sizes) / max_set_size)
-        aupr = average_precision_score(np.array(flattened_coverage), 1 - np.array(flattened_set_sizes) / max_set_size)
+        auroc = roc_auc_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
+        aupr = average_precision_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
         print("AUROC", auroc)
         print("AUPR", aupr)
 
