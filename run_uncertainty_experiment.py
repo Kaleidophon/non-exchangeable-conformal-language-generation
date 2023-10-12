@@ -162,6 +162,7 @@ def run_experiments(
     all_set_sizes = []
     coverage = []
     all_gold_probs = []
+    all_accuracies = []
 
     with torch.no_grad():
         for i, batch in tqdm(enumerate(data_loader), total=len(data_loader)):
@@ -216,6 +217,9 @@ def run_experiments(
 
             predictions = predictions[mask]
             labels = labels[mask]
+
+            accuracies = (torch.argmax(predictions, dim=-1) == labels).long()
+            all_accuracies.append(accuracies.cpu().numpy())
 
             # Apply one of three different methods here:
             #   1. "Classic" nucleus sampling: Include everything in the prediction set that corresponds to 1 - alpha
@@ -274,14 +278,15 @@ def run_experiments(
             all_gold_probs.append(gold_probs)
 
         # Save results
+        flattened_accuracy = [acc for seq_accuracies in all_accuracies for acc in seq_accuracies]
         flattened_coverage = [cov for seq_coverage in coverage for cov in seq_coverage]
         flattened_set_sizes = [size for seq_set_sizes in all_set_sizes for size in seq_set_sizes]
         flattened_gold_probs = [gold_prob for seq_gold_probs in all_gold_probs for gold_prob in seq_gold_probs]
 
         # Compute proxy binary classification task
         max_set_size = predictions.shape[-1]
-        auroc = roc_auc_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
-        aupr = average_precision_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
+        auroc = roc_auc_score(1 - np.array(flattened_accuracy), np.array(flattened_set_sizes) / max_set_size)
+        aupr = average_precision_score(1 - np.array(flattened_accuracy), np.array(flattened_set_sizes) / max_set_size)
         print("AUROC", auroc)
         print("AUPR", aupr)
 
