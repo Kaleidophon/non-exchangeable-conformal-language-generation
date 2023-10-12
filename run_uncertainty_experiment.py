@@ -267,7 +267,7 @@ def run_experiments(
             all_set_sizes.append(list(set_sizes))
 
             # Evaluate
-            gold_probs = predictions.gather(-1, labels.unsqueeze(-1))..squeeze(-1)
+            gold_probs = predictions.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
             is_covered = list((label_probs > 0).float().cpu().numpy())
             coverage.append(is_covered)
