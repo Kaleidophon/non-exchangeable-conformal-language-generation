@@ -143,7 +143,7 @@ def run_experiments(
         alpha=alpha, temperature=temperature, device=device
     )
 
-    if method in ("conformal_nucleus_sampling", "non_conformal_nucleus_sampling"):
+    if method in ("conformal_nucleus_sampling", "non_exchangeable_conformal_nucleus_sampling"):
         data_store = DataStore(
             key_dim=model_hidden_size, value_dim=1,
             distance_type=distance_type,
@@ -310,7 +310,7 @@ def run_experiments(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model",
+        "--model-identifier",
         type=str,
         default=MODEL_IDENTIFIER
     )
@@ -434,7 +434,7 @@ if __name__ == "__main__":
     try:
         # Run experiments
         run_experiments(
-            model_identifier=args.model,
+            model_identifier=args.model_identifier,
             dataset=args.dataset,
             batch_size=args.batch_size,
             method=args.method,
