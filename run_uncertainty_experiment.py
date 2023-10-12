@@ -267,7 +267,7 @@ def run_experiments(
             all_set_sizes.append(list(set_sizes))
 
             # Evaluate
-            gold_probs = predictions.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+            gold_probs = predictions.gather(-1, labels.unsqueeze(-1)).squeeze(-1).cpu().numpy()
             label_probs = prediction_sets.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
             is_covered = list((label_probs > 0).float().cpu().numpy())
             coverage.append(is_covered)
@@ -279,14 +279,14 @@ def run_experiments(
         flattened_gold_probs = [gold_prob for seq_gold_probs in all_gold_probs for gold_prob in seq_gold_probs]
 
         # Compute proxy binary classification task
-        auroc = roc_auc_score(flattened_coverage, flattened_set_sizes)
-        aupr = average_precision_score(flattened_coverage, flattened_set_sizes)
+        auroc = roc_auc_score(1 - np.array(flattened_coverage), flattened_set_sizes)
+        aupr = average_precision_score(1 - np.array(flattened_coverage), flattened_set_sizes)
         print("AUROC", auroc)
         print("AUPR", aupr)
 
         # Compute correlations
-        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - flattened_gold_probs.cpu().numpy())
-        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - flattened_gold_probs.cpu().numpy())
+        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
+        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
         print("Spearman's rho", spearmans_rho)
         print("Kendall's tau", kendalls_tau)
 
