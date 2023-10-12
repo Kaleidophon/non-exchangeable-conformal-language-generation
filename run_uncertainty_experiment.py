@@ -279,14 +279,15 @@ def run_experiments(
         flattened_gold_probs = [gold_prob for seq_gold_probs in all_gold_probs for gold_prob in seq_gold_probs]
 
         # Compute proxy binary classification task
-        auroc = roc_auc_score(1 - np.array(flattened_coverage), flattened_set_sizes)
-        aupr = average_precision_score(1 - np.array(flattened_coverage), flattened_set_sizes)
+        max_set_size = predictions.shape[-1]
+        auroc = roc_auc_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
+        aupr = average_precision_score(1 - np.array(flattened_coverage), np.array(flattened_set_sizes) / max_set_size)
         print("AUROC", auroc)
         print("AUPR", aupr)
 
         # Compute correlations
-        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
-        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
+        spearmans_rho = spearmanr(np.array(flattened_set_sizes) / max_set_size, 1 - np.array(flattened_gold_probs))
+        kendalls_tau = kendalltau(np.array(flattened_set_sizes) / max_set_size, 1 - np.array(flattened_gold_probs))
         print("Spearman's rho", spearmans_rho)
         print("Kendall's tau", kendalls_tau)
 
