@@ -285,8 +285,8 @@ def run_experiments(
         print("AUPR", aupr)
 
         # Compute correlations
-        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
-        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - np.array(flattened_gold_probs))
+        spearmans_rho = spearmanr(np.array(flattened_set_sizes), 1 - flattened_gold_probs.cpu().numpy())
+        kendalls_tau = kendalltau(np.array(flattened_set_sizes), 1 - flattened_gold_probs.cpu().numpy())
         print("Spearman's rho", spearmans_rho)
         print("Kendall's tau", kendalls_tau)
 
