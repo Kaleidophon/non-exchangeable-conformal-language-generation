@@ -206,6 +206,7 @@ def evaluate_generations(
 
     import time
     generation_times = []
+    sequence_generation_times = []
 
     for batch in tqdm(data_loader, total=len(data_loader)):
         for n in range(num_samples):
@@ -225,6 +226,7 @@ def evaluate_generations(
             token_ids = rearrange(outputs, "b s -> (b s)")
             token_ids = token_ids[token_ids != tokenizer.pad_token_id]
             generation_times.extend([(end - start) / len(token_ids)] * len(token_ids))
+            sequence_generation_times.extend([end - start] * outputs.shape[0])
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
@@ -235,6 +237,7 @@ def evaluate_generations(
             generations[n] += outputs
 
     print(f"Average speed {np.mean(generation_times):.3f} per token.")
+    print(f"Average speed {np.mean(sequence_generation_times):.3f} per sequence.")
 
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
