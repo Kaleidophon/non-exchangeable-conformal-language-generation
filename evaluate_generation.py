@@ -21,6 +21,7 @@ from typing import Optional, Tuple, List
 
 # EXT
 from codecarbon import OfflineEmissionsTracker
+from einops import rearrange
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -203,17 +204,27 @@ def evaluate_generations(
     # Generate translations according to specified method
     generations = [[] for _ in range(num_samples)]
 
+    import time
+    generation_times = []
+
     for batch in tqdm(data_loader, total=len(data_loader)):
         for n in range(num_samples):
+
+            start = time.time()
             outputs = model.generate(
                 input_ids=batch["input_ids"],
                 attention_mask=batch["attention_mask"],
                 **generation_config
             )
+            end = time.time()
 
             # For the non-exchangeable conformal sampling
             if isinstance(outputs, SampleEncoderDecoderOutput) or isinstance(outputs, SampleDecoderOnlyOutput):
                 outputs = outputs.sequences
+
+            token_ids = rearrange(outputs, "b s -> (b s)")
+            token_ids = token_ids[token_ids != tokenizer.pad_token_id]
+            generation_times.extend([(end - start) / len(token_ids)] * len(token_ids))
 
             outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
@@ -222,6 +233,8 @@ def evaluate_generations(
                 outputs = [" ".join(out.split()[:200]) for out in outputs]
 
             generations[n] += outputs
+
+    print(f"Average speed {np.mean(generation_times):.3f} per token.")
 
     del data_loader  # Delete data loader to free up memory
     del model  # Delete model to free up memory
