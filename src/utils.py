@@ -8,7 +8,7 @@ from typing import Type, List
 # EXT
 from accelerate import infer_auto_device_map, init_empty_weights
 from accelerate.utils.modeling import get_max_memory
-from transformers import PreTrainedModel, AutoModel, AutoConfig, OPTPreTrainedModel
+from transformers import PreTrainedModel, AutoModel, AutoConfig
 
 
 def shard_model(
@@ -18,7 +18,18 @@ def shard_model(
     config_class: Type[AutoConfig]
 ) -> PreTrainedModel:
     """
-    Load model onto multiple GPUs at once.
+    Shard model onto multiple GPUs at once.
+
+    Parameters
+    ----------
+    model_identifier: str
+        Model identifier for the Huggingface Hub.
+    sharding_devices: List[int]
+        Indices of the GPUs that the model should be sharded on.
+    model_class: Type[PreTrainedModel]
+        Class of the corresponding model.
+    config_class: Type[AutoConfig]
+        Class of the corresponding model's config.
     """
     max_memory = get_max_memory()
     max_memory = {

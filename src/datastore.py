@@ -71,12 +71,17 @@ class DataStore:
             Number of bytes in quantized codes.
         num_probes: int
             Number of coarse-level quantizers.
+        use_quantization: bool
+            Flag to indicate whether quantization should be used.
         device : Device
             Device that the datastore lives on.
         index_file_name : str
             Name of the file to save the index to. Defaults to 'index.trained'.
         token_ids_file_name : str
             Name of the file to save the token ids to. Defaults to 'token_ids.pt'.
+        entropy_values_file_name: str
+            File name for entropy values corresponding to items in the datastore. This is used by the
+            ConformalLogitProcessor and defaults to "entropy_values.pt".
         """
         assert distance_type in ("inner_product", "l2", "cosine"), \
             "Distance type has to be either 'inner_product', 'cosine' or 'l2'."
@@ -130,14 +135,22 @@ class DataStore:
 
         entropy_value_path = os.path.join(save_dir, self.entropy_values_file_name)
         if os.path.exists(entropy_value_path):
-            self.entropy_tensor = torch.load(os.path.join(save_dir, self.entropy_values_file_name), map_location=self.device)
+            self.entropy_tensor = torch.load(
+                os.path.join(save_dir, self.entropy_values_file_name),
+                map_location=self.device
+            )
             print(f"Loaded {self.entropy_tensor.shape[0]} values from disk.")
 
-    def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1000000) -> None:
+    def train_index(self, key_data: torch.FloatTensor, max_training_keys: int = 1_000_000) -> None:
         """
-        Training the FAISS index. We will perform random sampling on the keys.
-        :param key_store: a numpy array with shape (num_keys, dim_keys), each row is a key
-        :return: None. The index attribute will be updated after training.
+        Training the FAISS index by performing random sampling on the keys.
+
+        Parameters
+        ----------
+        key_store: torch.FloatTensor
+            Tensor with shape (num_keys, dim_keys), each row being a key.
+        max_training_keys: int
+            Maximum amount of keys used for training. Defaults to 1 million.
         """
         random_indices = np.random.choice(
             np.arange(key_data.shape[0]),
@@ -155,11 +168,18 @@ class DataStore:
         keys: torch.FloatTensor,
         values: torch.FloatTensor,
         entropies: Optional[torch.FloatTensor] = None
-    ) -> None:
+    ):
         """
-        Add the keys to the trained index.
-        :param keys_to_add: a numpy array of shape (num_keys, keys_dim)
-        :return: The index will be updated with the input keys.
+        Add data to the datastore.
+
+        Parameters
+        ----------
+        keys: torch.FloatTensor
+            Hidden representations of subsequences.
+        values: torch.FloatTensor
+            Ternsor of non-conformity scores.
+        entropies: Optional[torch.FloatTensor]
+            Optional tensor of corresponding entropy values. Used by the Ravfogel et al. (2023) baseline.
         """
         self.index.add(keys.cpu().numpy())  # add vectors to the index
         self.value_tensor = torch.cat(
@@ -169,11 +189,14 @@ class DataStore:
             [self.entropy_tensor, entropies.to(torch.float16)], dim=0
         )
 
-    def save(self, output_dir: str) -> None:
+    def save(self, output_dir: str):
         """
         Save the index and the index-to-token mapping in the output_dir.
-        :param output_dir: The directory to save the results.
-        :return: None. Results will be saved to output_dir.
+
+        Parameters
+        ----------
+        output_dir: str
+            Directory the datastore data should be saved to.
         """
         try:
             # write the trained index
@@ -199,10 +222,19 @@ class DataStore:
 
     def search_k(self, query: torch.FloatTensor, k: int) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """
-        Search for the top K nearest neighbors, along with the distance.
-        :param k: top k
-        :param query: should have shape (num_queries, dim_keys).
-        :return: scores: should have shape (num_queries, vocab_size), contains scores for each token for each entry
+        Search for the top K nearest neighbors, along with their distances.
+
+        Parameters
+        ----------
+        query: torch.FloatTensor
+            Hidden representations used as queries.
+        k: int
+            Number of neighbors that should be retrieved.
+
+        Returns
+        -------
+        Tuple[torch.FloatTensor, torch.FloatTensor]:
+            Distances of the found neighbors and their non-conformity scores.
         """
         query = query.cpu().numpy()
 
@@ -249,7 +281,13 @@ def build_calibration_data(
     data_loader: DataLoader
         Data loader to be used for the experiments.
     distance_type: str
-        Type of distance measure being used. Either has to be "inner_product" or "l2".
+        Type of distance measure being used. Either has to be "inner_product", "cosine" or "l2".
+    conformity_score: str
+        Type of conformity score that should be used. Should be either "simple" or "adaptive". Default is "adaptive".
+    ignore_token_ids: Tuple[int]
+        Tuple of token IDs that should be ignored when building the datastore. Defaults to (0, 1).
+    device: Device
+        Device the datastore should live on.
 
     Returns
     -------

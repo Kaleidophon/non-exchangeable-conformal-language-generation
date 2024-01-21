@@ -1,6 +1,6 @@
 """
-Perform hallucinations experiment, where we compare we first let the model generate freely, and then feed the same tokens
-back into the decoder, but restricting the attention on the source side. We then compare the two set sizes.
+Perform distributional shift experiment, where we observe generation quality under different magnitudes of noise added to model
+embeddings.
 """
 
 # STD
@@ -65,6 +65,46 @@ def perform_shift_experiment(
     device: Device = "cpu",
     sharding: Optional[List[int]] = None,
 ):
+    """
+    Perform the distributional shift experiment for generation quality.
+
+    Parameters
+    ----------
+    model_identifier: str
+        Model to be used for the experiments. If model_path is specified, the model will be loaded from there.
+    dataset: str
+        Dataset to be used for the experiments.
+    batch_size: int
+        Batch size to be used for the experiments.
+    method: str
+        Type of non-conformity score to be used. Has to be either "simple" or "adaptive".
+    temperature: float
+        Temperature used for the datastore retrieval.
+    data_dir: str
+        Path to the data directory.
+    result_dir: str
+        Path to the directory where the results should be saved.
+    alpha: float
+        Used to set the 1 - alpha desired confidence level for conformal methods. Default is None.
+    data_store: Optional[DataStore]
+        Loaded datastore for nearest neighbor retrieval. Default is None.
+    data_store: Optional[DataStore]
+        Loaded datastore for nearest neighbor retrieval. Default is None.
+    distance_type: Optional[str]
+        Distance type to be used for retrieval. Either has to be "inner_product", "cosine" or "l2". Default is None.
+    conformity_score: Optional[str]
+        Type of non-conformity score to be used. Has to be either "simple" or "adaptive". Default is None.
+    num_neighbors: Optional[int]
+        Number of neighbors used for retrieval. Default is None.
+    seed: int
+        Set random seed used for replicability. Defaults to SEED.
+    device: Device
+        Device the model lives on.
+    ignore_token_ids: Tuple[int, ...]
+        Token IDs to ignore during experiments.
+    sharding: Optional[List[int]]
+        Indices of GPUs a shared model should be distributed across. Defaults to None, in which case no sharding is used.
+    """
     # Set seed
     torch.manual_seed(seed)
     np.random.seed(seed)

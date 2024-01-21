@@ -66,7 +66,6 @@ def evaluate_generations(
     temperature: float,
     data_dir: str,
     result_dir: str,
-    use_mbr: bool,
     evaluation_metrics: Tuple[str, ...] = ("bleu", "chrf", "comet"),
     # Arguments for common sampling methods
     num_beams: Optional[int] = None,
@@ -85,6 +84,55 @@ def evaluate_generations(
     device: Device = "cpu",
     sharding: Optional[List[int]] = None
 ):
+    """
+    Evaluate the generations of different methods.
+
+    Parameters
+    ----------
+    model_identifier: str
+        Huggingface hub identifier for the target model.
+    dataset: str
+        Name of the target dataset.
+    batch_size: int
+        Batch size to be used.
+    generation_method: str
+        Generation method to be used. Should be either "beam_search", "greedy", "top_k_sampling", "nucleus_sampling",
+        "conformal_nucleus_sampling" or "non_exchangeable_nucleus_sampling".
+    temperature: float
+        Temperature used for the datastore retrieval.
+    data_dir: str
+        Directory the dataset is stored in.
+    result_dir: str
+        Directory the results should be saved to.
+    evaluation_metrics: Tuple[str, ...]
+        Evaluation metrics used. Defaults to ("bleu", "chrf", "comet").
+    num_beams: Optional[int]
+        Number of beams used for beam search. Defaults to None.
+    num_samples: Optional[int]
+        Number of samples to be generated per input. Defaults to None, in which case a single sample is used.
+    softmax_temperature: Optional[float]
+        Softmax temperature used for generation. Defaults to None, in which case 1 is used.
+    top_k: Optional[int]
+        k used for top-k sampling. Defaults to None.
+    top_p: Optional[float]
+        p used for top_p sampling. Defaults to None.
+    alpha: float
+        Used to set the 1 - alpha desired confidence level for conformal methods. Default is None.
+    data_store: Optional[DataStore]
+        Loaded datastore for nearest neighbor retrieval. Default is None.
+    distance_type: Optional[str]
+        Distance type to be used for retrieval. Either has to be "inner_product", "cosine" or "l2". Default is None.
+    conformity_score: Optional[str]
+        Type of non-conformity score to be used. Has to be either "simple" or "adaptive". Default is None.
+    num_neighbors: Optional[int]
+        Number of neighbors used for retrieval. Default is None.
+    seed: int
+        Set random seed used for replicability. Defaults to SEED.
+    device: Device
+        Device the model lives on.
+    sharding: Optional[List[int]]
+        Indices of GPUs a shared model should be distributed across. Defaults to None, in which case no sharding is used.
+    """
     # Set seed
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -248,22 +296,12 @@ def evaluate_generations(
         tgt_abbr = tgt_lang[:2]
         source_file = f"{data_dir}/{dataset}/test.{SUFFIX[src_abbr]}"
         reference_path = f"{data_dir}/{dataset}/test.{SUFFIX[tgt_abbr]}"
-
-        if use_mbr:
-            partial_results = [
-                evaluate_translation_model(
-                    generations, source_file, reference_path, use_mbr=use_mbr, metrics=evaluation_metrics,
-                    device=device
-                )
-            ]
-
-        else:
-            partial_results = [
-                evaluate_translation_model(
-                    generations[n], source_file, reference_path, use_mbr=use_mbr, metrics=evaluation_metrics
-                )
-                for n in range(num_samples)
-            ]
+        partial_results = [
+            evaluate_translation_model(
+                generations[n], source_file, reference_path, metrics=evaluation_metrics
+            )
+            for n in range(num_samples)
+        ]
 
     elif task == "lm":
         reference_path = f"{data_dir}/{dataset}/references.txt"
@@ -349,11 +387,6 @@ if __name__ == "__main__":
         type=str,
         default=("bleu", "chrf", "comet"),
         choices=("bleu", "chrf", "comet", "mauve", "bleurt", "bert_score")
-    )
-    parser.add_argument(
-        "--use-mbr",
-        action="store_true",
-        default=False
     )
     parser.add_argument(
         "--batch-size",
@@ -490,7 +523,6 @@ if __name__ == "__main__":
             temperature=args.temperature,
             data_dir=args.data_dir,
             result_dir=args.result_dir,
-            use_mbr=args.use_mbr,
             evaluation_metrics=args.evaluation_metrics,
             num_beams=args.num_beams,
             num_samples=args.num_samples,

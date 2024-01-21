@@ -3,13 +3,13 @@ Implement functions concerned with data loading and preprocessing.
 """
 
 # STD
-from typing import Dict
+from typing import Dict, List
 
 # EXT
 import codecs
 import torch
 from torch.utils.data import DataLoader, Dataset
-from typing import Tuple
+from typing import Tuple, Union
 
 # PROJECT
 from src.custom_types import Tokenizer, Device
@@ -24,7 +24,31 @@ SUFFIX = {
 
 
 class ParallelDataset(Dataset):
-    def __init__(self, src_data, tgt_data, tokenizer: Tokenizer, device: Device, **tokenizer_kwargs):
+    """
+    A parallel dataset used for Machine translation datasets.
+    """
+    def __init__(
+        self,
+        src_data: List[str],
+        tgt_data: List[str],
+        tokenizer: Tokenizer,
+        device: Device,
+        **tokenizer_kwargs
+    ):
+        """
+        Initialize a parallel dataset.
+
+        Parameters
+        ----------
+        src_data: List[str]
+            Source language sentences.
+        tgt_data: List[str]
+            Target language sentences.
+        tokenizer: Tokenizer
+            Model tokenizer.
+        device: Device
+            Device the batched inputs should be moved to.
+        """
         super().__init__()
 
         self.tgt_data = tgt_data
@@ -36,10 +60,10 @@ class ParallelDataset(Dataset):
 
         self.length = len(self.src_data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, Union[torch.LongTensor, torch.FloatTensor]]:
         src = self.tokenizer(self.src_data[idx], return_tensors="pt", **self.tokenizer_kwargs)
         tgt = self.tokenizer(self.tgt_data[idx], return_tensors="pt", **self.tokenizer_kwargs)
 
@@ -54,20 +78,37 @@ class ParallelDataset(Dataset):
 
 
 class TextDataset(Dataset):
-    def __init__(self, data, tokenizer: Tokenizer, device: Device, ravfogel_prompt: bool = False, **tokenizer_kwargs):
+    """
+    A simple text dataset used for language modeling.
+    """
+    def __init__(self, data, tokenizer: Tokenizer, device: Device, use_ravfogel_prompt: bool = False, **tokenizer_kwargs):
+        """
+        Initialize a simple text dataset.
+
+        Parameters
+        ----------
+        data: List[str]
+            Sentences in the dataset.
+        tokenizer: Tokenizer
+            Used model tokenizer.
+        device: Device
+            Device the batched inputs should be moved to.
+        use_ravfogel_prompt: bool
+            Flag to indicate whether we should use a prompting setup like in Ravfogel et al. (2023). Default is False.
+        """
         super().__init__()
 
         self.tokenizer = tokenizer
         self.device = device
         self.tokenizer_kwargs = tokenizer_kwargs
         self.data = [line.strip() for line in data]
-        self.ravfogel_prompt = ravfogel_prompt
+        self.ravfogel_prompt = use_ravfogel_prompt
         self.length = len(self.data)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Dict[str, Union[torch.LongTensor, torch.FloatTensor]]:
 
         data = self.data[idx]
 
@@ -121,11 +162,13 @@ def load_data(
         Path to directory where data is stored.
     load_splits: Tuple[str, ...]
         Splits to load.
+    use_ravfogel_prompt: bool
+            Flag to indicate whether we should use a prompting setup like in Ravfogel et al. (2023). Default is False.
 
     Returns
     -------
-    DataLoader
-        DataLoader containing the dataset.
+    Dict[str, DataLoader]
+        Dataloaders containing different splits of the dataset.
     """
     data_loaders = {}
     task_type = DATASET_TASKS[dataset_name]
@@ -172,7 +215,7 @@ def load_data(
             data_split = codecs.open(f"{data_dir}/{dataset_name}/test.txt", "r", "utf-8").readlines()
             data_split = "".join(data_split).split("</s>")[:-1]
             test_dataset = TextDataset(
-                data_split, tokenizer, device, ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
+                data_split, tokenizer, device, use_ravfogel_prompt=use_ravfogel_prompt, **tokenizer_kwargs
             )
 
             test_dl = DataLoader(

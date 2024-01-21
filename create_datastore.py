@@ -52,6 +52,40 @@ def create_datastore(
     save_dir: str,
     sharding: Optional[List[int]] = None,
 ):
+    """
+    Create a datastore for a specific model and dataset.
+
+    Parameters
+    ----------
+    model_identifier: str
+        Identifiers for the model in the Huggingface Hub.
+    dataset: str
+        Name of the target dataset.
+    batch_size: int
+        Batch size used for creating the datastore.
+    conformity_score: str
+        Name of the conformity method to use. Should be either "simple" or "adaptive".
+    distance_type: str
+        Type of distance measure being used. Either has to be "inner_product", "l2" or "cosine".
+    num_centroids: int
+        Number of centroids used for datastore.
+    code_size: int
+        Code size used for datastore.
+    num_probes: int
+        Number of probes for retrieval.
+    use_quantization: bool
+        Flag to indicate whether quantization should be used.
+    device: Device
+        Device used to move the model to.
+    seed: int
+        Random seed used for replicability.
+    data_dir: str
+        Directory that the source dataset is located in.
+    save_dir: str
+        Directory the datastore should be saved to.
+    sharding: Optional[List[int]]
+        Indices of GPUs a shared model should be distributed across. Defaults to None, in which case no sharding is used.
+    """
     # Set seed
     torch.manual_seed(seed)
     np.random.seed(seed)

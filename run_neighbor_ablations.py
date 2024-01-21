@@ -60,7 +60,7 @@ def run_alpha_ablation_study(
     device: Device,
     data_dir: str,
     result_dir: str,
-    ignore_token_ids: Tuple[int] = (1, 2),
+    ignore_token_ids: Tuple[int, ...] = (1, 2),
     sharding: Optional[List[int]] = None,
 ):
     """
@@ -74,14 +74,34 @@ def run_alpha_ablation_study(
         Dataset to be used for the experiments.
     batch_size: int
         Batch size to be used for the experiments.
+    conformity_method: Optional[str]
+        Type of non-conformity score to be used. Has to be either "simple" or "adaptive".
     distance_type: str
         Type of distance to be used for the experiments.
+    temperature: float
+        Temperature used for the datastore retrieval.
+    alpha: float
+        Used to set the 1 - alpha desired confidence level for conformal methods. Default is None.
+    datastore_dir: str
+        Directory the datastore is stored in.
+    num_centroids : int
+        Number of centroids to use for clustering during the quantization process.
+    code_size : int
+        Number of bytes in quantized codes.
+    num_probes: int
+        Number of coarse-level quantizers.
+    use_quantization: bool
+        Flag to indicate whether quantization should be used.
     device: Device
         Device to be used for the experiments.
     data_dir: str
         Path to the data directory.
     result_dir: str
         Path to the directory where the results should be saved.
+    ignore_token_ids: Tuple[int, ...]
+        Token IDs tio ignore during experiments.
+    sharding: Optional[List[int]]
+        Indices of GPUs a shared model should be distributed across. Defaults to None, in which case no sharding is used.
 
     Returns
     -------

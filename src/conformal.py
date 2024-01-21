@@ -4,7 +4,7 @@ Define the core functions for conformal risk control in NLG.
 
 # STD
 from collections import namedtuple
-from typing import Tuple
+from typing import Tuple, Dict, List
 
 # EXT
 import numpy as np
@@ -48,6 +48,18 @@ def adaptive_conformity_score(predictions: torch.FloatTensor, targets: torch.Lon
     Compute adaptive conformity score based on the predictions and targets.
     In comparison to the simple conformity score, the adaptive conformity score uses the cumulative sum or probabilities
     until the target token is reached.
+
+    Parameters
+    ----------
+    predictions: torch.FloatTensor
+        Predictions of the model.
+    targets: torch.LongTensor
+        Targets of the model.
+
+    Returns
+    -------
+    torch.FloatTensor
+        Conformity scores for each prediction-target pair.
     """
     sorted_classes, index = torch.sort(-predictions, dim=-1)
     sorted_probs = torch.gather(predictions, -1, index)
@@ -61,22 +73,26 @@ def adaptive_conformity_score(predictions: torch.FloatTensor, targets: torch.Lon
 class ConformalCalibrator:
     """
     Class to create calibrated prediction sets using conformal prediction. This base version is based on
-    non-exchangeable conformal prediction, were some weights are taken into account when computing the quantile.
+    non-exchangeable conformal prediction, where some weights are taken into account when computing the quantile.
     """
 
     def __init__(
-        self, alpha: float, distance_type: str = "inner_product",
-            temperature: float = 1.0, device: Device = "cpu", **kwargs
+        self,
+        alpha: float,
+        distance_type: str = "inner_product",
+        temperature: float = 1.0,
+        device: Device = "cpu",
+        **kwargs
     ):
         """
         Initialize a conformal calibrator.
 
         Parameters
         ----------
-        data_store: DataStore
-            DataStore containing the data to be used for the calibration.
+        alpha: float
+            Define desired coverage through 1 - alpha.
         distance_type: str
-            Type of distance measure being used. Either has to be "inner_product" or "l2".
+            Type of distance measure being used. Either has to be "inner_product", "l2" or "cosine".
         temperature: float
             Temperature to be used when computing the weights. Large temperatures will lead to more uniform weights.
             Default is 1.0.
@@ -125,7 +141,7 @@ class ConformalCalibrator:
         self,
         weights: torch.FloatTensor,
         conformity_scores: torch.FloatTensor
-    ) -> Tuple[float, float]:
+    ) -> Dict[str, float]:
         """
         Compute quantile based on the computed weights and conformity scores.
 
@@ -138,8 +154,9 @@ class ConformalCalibrator:
 
         Returns
         -------
-        Tuple[float, float]
-            NamedTuple of (q_hat, n_eff) where q_hat is the computed quantile and n_eff is the effective sample size.
+        Dict[str, float]
+            Data corresponding the q_hat calculation in a dictionary, including the computed quantile (q_hat), effective
+            sample size (n_eff) and the normalized weights.
         """
         # Normalize weights
         normed_weights = weights / (torch.sum(weights, dim=-1, keepdim=True) + 1)
@@ -172,14 +189,32 @@ class ConformalCalibrator:
         method: str,
         predictions: torch.FloatTensor,
         q_hat: torch.FloatTensor
-    ) -> torch.FloatTensor:
+    ) -> Tuple[torch.FloatTensor, List[int]]:
         """
         Compute the prediction set based on the predictions and the quantile.
+
+        Parameters
+        ----------
+        method: str
+            Name of the prediction set method. Must be either "classic" or "adaptive".
+        predictions: torch.FloatTensor
+            Original predictions by the model.
+        q_hat: torch.FloatTensor
+            Compute quantiles to create the prediction sets.
+
+        Returns
+        -------
+        Tuple[torch.FloatTensor, torch.LongTensor]
+            Tuple of predictive distributions (with excluded token probabilities set to 0) as well as a list of
+            corresponding set sizes.
         """
         return self.prediction_set_methods[method](predictions.to(self.device), q_hat.to(self.device))
 
     @staticmethod
-    def compute_classic_prediction_set(predictions: torch.FloatTensor, q_hat: torch.FloatTensor) -> Tuple[torch.FloatTensor, int]:
+    def compute_classic_prediction_set(
+        predictions: torch.FloatTensor,
+        q_hat: torch.FloatTensor
+    ) -> Tuple[torch.FloatTensor, List[int]]:
         """
         Compute the classic prediction set based on the predictions and the quantile.
 
@@ -192,7 +227,7 @@ class ConformalCalibrator:
 
         Returns
         -------
-        Tuple[torch.FloatTensor, int]
+        Tuple[torch.FloatTensor, List[int]]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
         q_hat = q_hat.unsqueeze(-1).repeat(1, predictions.shape[-1])
@@ -204,7 +239,10 @@ class ConformalCalibrator:
         return predictions, set_sizes
 
     @staticmethod
-    def compute_adaptive_prediction_set(predictions: torch.FloatTensor, q_hat: torch.FloatTensor) -> Tuple[torch.FloatTensor, int]:
+    def compute_adaptive_prediction_set(
+        predictions: torch.FloatTensor,
+        q_hat: torch.FloatTensor
+    ) -> Tuple[torch.FloatTensor, List[int]]:
         """
         Compute the adaptive prediction set based on the predictions and the quantile.
 
@@ -217,7 +255,7 @@ class ConformalCalibrator:
 
         Returns
         -------
-        Tuple[torch.FloatTensor, int]
+        Tuple[torch.FloatTensor, List[int]]
             Prediction set (in the form of a zeroed-out and re-normalized output distribution) and its size.
         """
         sorted_classes, index = torch.sort(-predictions)  # Sort descendingly
@@ -251,7 +289,8 @@ class ConformalCalibrator:
 
 class ConformalLogitProcessor(LogitsProcessor):
     """
-    Warper that uses the conformal prediction framework to compute prediction sets.
+    LogitProcessor that uses the conformal prediction framework to compute prediction sets.
+    This corresponds to the method used by Ravfogel et al. (2023).
     """
     def __init__(
         self,
@@ -261,6 +300,22 @@ class ConformalLogitProcessor(LogitsProcessor):
         calibrator: ConformalCalibrator,
         num_bins: int = 10
     ):
+        """
+        Initialize the ConformalLogitProcessor.
+
+        Parameters
+        ----------
+        alpha: float
+            Define desired coverage through 1 - alpha.
+        conformity_score: str
+            Name of conformity score method being used. Should be "classic" or "adapted".
+        data_store: DataStore
+            Pre-populated datastore.
+        calibrator: ConformalCalibrator
+            Instance of conformal calibrator class.
+        num_bins: int
+            Number of entropy bins to compute bin-wise quantiles for. Set to 10 by default.
+        """
         super().__init__()
         self.conformity_score = conformity_score
         self.calibrator = calibrator
@@ -293,17 +348,42 @@ class ConformalLogitProcessor(LogitsProcessor):
             ).squeeze(-1).to(self.calibrator.device)
             self.q_hats.append(q_hat)
 
-    def get_q_hats(self, scores: torch.FloatTensor):
+    def get_q_hats(self, predictions: torch.FloatTensor) -> torch.FloatTensor:
         """
         Get the q_hat corresponding to an entropy bin.
+
+        Parameters
+        ----------
+        predictions: torch.FloatTensor
+            Model predictions.
+
+        Returns
+        -------
+        torch.FloatTensor
+            q_hat values corresponding to predictions.
         """
-        entropy = torch.sum(-torch.log(scores) * scores, dim=-1)
+        entropy = torch.sum(-torch.log(predictions) * predictions, dim=-1)
         bin_indices = torch.searchsorted(self.bin_boundaries, entropy) - 1
         q_hats = torch.stack([self.q_hats[i] for i in bin_indices])
 
         return q_hats
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Adapt the predictions of the model but zeroing out all tokens that are not included in the prediction set.
+
+        Parameters
+        ----------
+        input_ids: torch.LongTensor
+            Input ids for the current batch.
+        scores: torch.FloatTensor
+            Predictions of the model.
+
+        Returns
+        -------
+        torch.FloatTensor
+            Adapted model predictions.
+        """
         cur_len = input_ids.shape[-1]
 
         # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor
@@ -321,7 +401,8 @@ class ConformalLogitProcessor(LogitsProcessor):
 
 class NonExchangeableConformalLogitProcessor(LogitsProcessor):
     """
-    Warper that uses the non-exchangeable conformal prediction framework to compute prediction sets.
+    LogitsProcessor that uses the non-exchangeable conformal prediction framework to compute prediction sets. This
+    corresponds to our proposed method, non-exchangeable conformal language generation through nearest neighbors.
     """
     def __init__(
         self,
@@ -332,6 +413,24 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
         calibrator: ConformalCalibrator,
         store_set_sizes: bool = False,
     ):
+        """
+        Initialize a NonExchangeableConformalLogitProcessor.
+
+        Parameters
+        ----------
+        conformity_score: str
+            Name of conformity score method being used. Should be "classic" or "adapted".
+        distance_type: str
+            Type of distance measure being used. Either has to be "inner_product", "l2" or "cosine".
+        num_neighbors: int
+            Number of neighbors to consider when computing quantiles.
+        data_store: DataStore
+            Pre-populated datastore.
+        calibrator: ConformalCalibrator
+            Conformal calibrator.
+        store_set_sizes: bool
+            Flag to indicate whether set sizes should be stored or not.
+        """
         super().__init__()
         self.distance_type = distance_type
         self.num_neighbors = num_neighbors
@@ -346,7 +445,17 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
 
     def patch_model(self, model: PreTrainedModel) -> PreTrainedModel:
         """
-        Patch the model forward pass to save the decoder hidden encodings.
+        Patch the model forward pass to save the decoder hidden encodings for generation with conformal prediction sets.
+
+        Parameters
+        ----------
+        model: PreTrainedModel
+            Model whose forward pass should be patched.
+
+        Returns
+        -------
+        PreTrainedModel
+            Patched model.
         """
         def hook_fn(model, inputs, outputs):
             if isinstance(model, M2M100PreTrainedModel):
@@ -366,6 +475,21 @@ class NonExchangeableConformalLogitProcessor(LogitsProcessor):
         return model
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Adapt the predictions of the model but zeroing out all tokens that are not included in the prediction set.
+
+        Parameters
+        ----------
+        input_ids: torch.LongTensor
+            Input ids for the current batch.
+        scores: torch.FloatTensor
+            Predictions of the model.
+
+        Returns
+        -------
+        torch.FloatTensor
+            Adapted model predictions.
+        """
         cur_len = input_ids.shape[-1]
 
         # Avoid any modifications to the scores by the ForcedBOSTokenLogitsProcessor

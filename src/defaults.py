@@ -11,7 +11,7 @@ from transformers import (
 DATA_DIR = "./data/wmt22"
 RESULT_DIR = "./results"
 EMISSION_DIR = "./emissions"
-PROJECT_NAME = "nlg-conformal-risk-control"
+PROJECT_NAME = "non_exchangeable_conformal_language_generation"
 MODEL_IDENTIFIER = "facebook/m2m100_418M"
 
 # Map available language pairs to language identifiers for tokenizer

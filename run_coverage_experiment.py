@@ -65,7 +65,7 @@ def run_experiments(
     data_dir: str,
     result_dir: str,
     datastore_dir: str,
-    ignore_token_ids: Tuple[int] = (1, 2),
+    ignore_token_ids: Tuple[int, ...] = (1, 2),
     sharding: Optional[List[int]] = None,
 ):
     """
@@ -79,24 +79,38 @@ def run_experiments(
         Dataset to be used for the experiments.
     batch_size: int
         Batch size to be used for the experiments.
+    method: str
+        Generation method to test.
+    conformity_method: str
+        Type of non-conformity score to be used. Has to be either "simple" or "adaptive".
     distance_type: str
         Type of distance to be used for the experiments.
     alpha: float
         Pre-defined confidence level for the experiments.
+    temperature: float
+        Temperature used for the datastore retrieval.
+    num_neighbors: int
+        Number of neighbors used for retrieval.
+    datastore_dir: str
+        Directory to load the datastore from.
+    num_centroids : int
+        Number of centroids to use for clustering during the quantization process.
+    code_size : int
+        Number of bytes in quantized codes.
+    num_probes: int
+        Number of coarse-level quantizers.
+    use_quantization: bool
+        Flag to indicate whether quantization should be used.
     device: Device
         Device to be used for the experiments.
     data_dir: str
         Path to the data directory.
     result_dir: str
         Path to the directory where the results should be saved.
-    source_path: str
-        Path to the file with translation sources.
-    references_path: str
-        Path to the file with references translations.
-    calibration_data_path: Optional[str]
-        Path to the calibration data. If not None, the calibration data will be loaded from the data directory.
-    wandb_run: Optional[WandBRun]
-        WandB run to be used for the experiments.
+    ignore_token_ids: Tuple[int, ...]
+        Token IDs tio ignore during experiments.
+    sharding: Optional[List[int]]
+        Indices of GPUs a shared model should be distributed across. Defaults to None, in which case no sharding is used.
 
     Returns
     -------
