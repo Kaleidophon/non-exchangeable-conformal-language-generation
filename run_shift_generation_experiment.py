@@ -84,10 +84,10 @@ def perform_shift_experiment(
         Path to the data directory.
     result_dir: str
         Path to the directory where the results should be saved.
+    softmax_temperature: float
+        Softmax temperature used for generation.
     alpha: float
         Used to set the 1 - alpha desired confidence level for conformal methods. Default is None.
-    data_store: Optional[DataStore]
-        Loaded datastore for nearest neighbor retrieval. Default is None.
     data_store: Optional[DataStore]
         Loaded datastore for nearest neighbor retrieval. Default is None.
     distance_type: Optional[str]
