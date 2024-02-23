@@ -1,7 +1,7 @@
 # Non-Exchangeable Conformal Language Generation with Nearest Neighbors
 
 This is the Github repository for the paper EACL 2024 Findings paper of the same name by Dennis Ulmer, Chrysoula Zerva and 
-André F.T. Martins [Link coming soon].
+André F.T. Martins [Link](https://arxiv.org/pdf/2402.00707.pdf).
 
 ## Installation
 
@@ -108,4 +108,9 @@ For the ablation studies in appendix A.4, run
 
 Please cite the paper and code as following:
 
-[TODO: Coming soon]
+@article{ulmer2024non,
+  title={Non-Exchangeable Conformal Language Generation with Nearest Neighbors},
+  author={Ulmer, Dennis and Zerva, Chrysoula and Martins, Andr{\'e} FT},
+  journal={arXiv preprint arXiv:2402.00707},
+  year={2024}
+}
