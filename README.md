@@ -114,3 +114,7 @@ Please cite the paper and code as following:
       journal={arXiv preprint arXiv:2402.00707},
       year={2024}
     }
+
+## Funding
+
+This work was funded by the European Union's Horizon Europe (HE) Research and Innovation programme under Grant Agreement No 101070631 and from the UK Research and Innovation (UKRI) under the UK government's HE funding grant No 10039436.
